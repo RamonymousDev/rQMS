@@ -155,6 +155,7 @@
 								<TableHead>Process</TableHead>
 								<TableHead>Code</TableHead>
 								<TableHead>Name</TableHead>
+								<TableHead class="text-right">Board</TableHead>
 							</TableRow>
 						</TableHeader>
 						<TableBody>
@@ -165,6 +166,17 @@
 										<Badge variant="secondary">{line.code}</Badge>
 									</TableCell>
 									<TableCell>{line.name}</TableCell>
+									<TableCell class="text-right">
+										<Button
+											variant="outline"
+											size="sm"
+											href="/board/{line.code}"
+											target="_blank"
+											rel="noopener noreferrer"
+										>
+											Board ↗
+										</Button>
+									</TableCell>
 								</TableRow>
 							{/each}
 						</TableBody>

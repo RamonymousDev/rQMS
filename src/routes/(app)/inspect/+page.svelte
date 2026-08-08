@@ -3,6 +3,8 @@
 	import { resolve } from '$app/paths';
 	import { onMount, onDestroy } from 'svelte';
 	import { toast } from 'svelte-sonner';
+	import { getShift } from '$lib/shift.js';
+	import { Progress } from '$lib/components/ui/progress/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import {
@@ -81,6 +83,47 @@
 		if (!selectedLine) return 1;
 		if (!spec) return 2;
 		return 3;
+	});
+
+	const activeShift = $derived(getShift());
+
+	/**
+	 * Hitung progress: berapa item wajib sudah diisi vs total.
+	 * Item wajib = semua point, spot (kalau hasSpot), hardware, length, visual.
+	 */
+	const progress = $derived.by(() => {
+		if (!spec) return { filled: 0, total: 0, pct: 0 };
+		let total = 0;
+		let filled = 0;
+
+		if (spec.hasPoint) {
+			for (const p of spec.points) {
+				total++;
+				if (pointAnswers[p.pointNo]?.status) filled++;
+			}
+		}
+		if (spec.hasSpot) {
+			total++;
+			if (spotActual !== '') filled++;
+		}
+		if (spec.hasHardware) {
+			for (const h of spec.hardwares) {
+				total++;
+				if (hardwareAnswers[h.hardwareId]?.actualValue !== '') filled++;
+			}
+		}
+		if (spec.hasLength) {
+			for (const l of spec.lengths) {
+				total++;
+				if (lengthAnswers[l.lengthNo]?.actualMm !== '') filled++;
+			}
+		}
+		if (spec.hasVisual) {
+			total++;
+			if (visualStatus) filled++;
+		}
+
+		return { filled, total, pct: total === 0 ? 100 : Math.round((filled / total) * 100) };
 	});
 
 	const STORAGE_KEY = 'inspect-draft';
@@ -514,7 +557,12 @@
 		<Card>
 			<CardHeader>
 				<CardTitle>2. Scan Part &amp; Pilih Stage</CardTitle>
-				<CardDescription>Line aktif: {selectedLine.code}</CardDescription>
+				<CardDescription class="flex items-center gap-2">
+					Line aktif: {selectedLine.code}
+					<Badge variant={activeShift === 'DAY' ? 'default' : 'secondary'} class="text-xs">
+						Shift {activeShift}
+					</Badge>
+				</CardDescription>
 			</CardHeader>
 			<CardContent class="grid gap-4">
 				<div class="grid gap-2">
@@ -603,11 +651,22 @@
 	{#if spec}
 		<Card>
 			<CardHeader>
-				<CardTitle>3. Form Inspeksi</CardTitle>
-				<CardDescription>
-					{spec.partNo} — {spec.partName} · Line {spec.lineCode} · Stage {spec.stage} · Shift
-					{spec.shift}
-				</CardDescription>
+				<div class="flex items-start justify-between gap-4">
+					<div>
+						<CardTitle>3. Form Inspeksi</CardTitle>
+						<CardDescription>
+							{spec.partNo} — {spec.partName} · Line {spec.lineCode} · Stage {spec.stage} · Shift
+							{spec.shift}
+						</CardDescription>
+					</div>
+					<div class="shrink-0 text-right">
+						<span class="text-sm font-semibold tabular-nums">
+							{progress.filled}/{progress.total}
+						</span>
+						<p class="text-xs text-muted-foreground">item diisi</p>
+					</div>
+				</div>
+				<Progress value={progress.pct} class="mt-3 h-2" />
 			</CardHeader>
 			<CardContent class="grid gap-6">
 				{#if spec.hasPoint}
@@ -615,28 +674,32 @@
 						<h3 class="text-sm font-semibold">Points</h3>
 						{#each spec.points as point (point.pointNo)}
 							<div class="grid gap-2 rounded-lg border p-3">
-								<div class="flex items-center justify-between">
-									<span class="text-sm font-medium">{point.pointNo}</span>
-									<div class="flex gap-2">
-										<Button
-											size="sm"
-											variant={pointAnswers[point.pointNo]?.status === 'OK' ? 'default' : 'outline'}
-											class={pointAnswers[point.pointNo]?.status === 'OK' ? okBtnClass : ''}
-											onclick={() => (pointAnswers[point.pointNo].status = 'OK')}
-										>
-											OK
-										</Button>
-										<Button
-											size="sm"
-											variant={pointAnswers[point.pointNo]?.status === 'NG'
-												? 'destructive'
-												: 'outline'}
-											class={pointAnswers[point.pointNo]?.status === 'NG' ? ngBtnClass : ''}
-											onclick={() => (pointAnswers[point.pointNo].status = 'NG')}
-										>
-											NG
-										</Button>
-									</div>
+								<span class="text-sm font-medium">{point.pointNo}</span>
+								<div class="grid grid-cols-2 gap-2">
+									<Button
+										size="lg"
+										variant={pointAnswers[point.pointNo]?.status === 'OK' ? 'default' : 'outline'}
+										class={pointAnswers[point.pointNo]?.status === 'OK' ? okBtnClass : ''}
+										onclick={() => {
+											pointAnswers[point.pointNo].status = 'OK';
+											markDirty();
+										}}
+									>
+										OK
+									</Button>
+									<Button
+										size="lg"
+										variant={pointAnswers[point.pointNo]?.status === 'NG'
+											? 'destructive'
+											: 'outline'}
+										class={pointAnswers[point.pointNo]?.status === 'NG' ? ngBtnClass : ''}
+										onclick={() => {
+											pointAnswers[point.pointNo].status = 'NG';
+											markDirty();
+										}}
+									>
+										NG
+									</Button>
 								</div>
 								{#if pointAnswers[point.pointNo]?.status === 'NG'}
 									<Textarea
@@ -766,9 +829,9 @@
 					<div class="grid gap-3">
 						<h3 class="text-sm font-semibold">Visual</h3>
 						<div class="grid gap-2 rounded-lg border p-3">
-							<div class="flex gap-2">
+							<div class="grid grid-cols-2 gap-2">
 								<Button
-									size="sm"
+									size="lg"
 									variant={visualStatus === 'OK' ? 'default' : 'outline'}
 									class={visualStatus === 'OK' ? okBtnClass : ''}
 									onclick={() => {
@@ -779,7 +842,7 @@
 									OK
 								</Button>
 								<Button
-									size="sm"
+									size="lg"
 									variant={visualStatus === 'NG' ? 'destructive' : 'outline'}
 									class={visualStatus === 'NG' ? ngBtnClass : ''}
 									onclick={() => {
@@ -802,22 +865,59 @@
 					</div>
 				{/if}
 
-				<div class="flex justify-end gap-2">
-					<Button
-						variant="outline"
-						onclick={() => {
-							resetFlow();
-							goto(resolve('/dashboard'));
-						}}>Batal</Button
-					>
-					<Button disabled={submitting} onclick={() => submit()}>
-						{submitting ? 'Menyimpan...' : 'Submit Inspeksi'}
-					</Button>
-				</div>
+				<div class="h-24"></div>
 			</CardContent>
 		</Card>
 	{/if}
 </div>
+
+<!-- Sticky submit footer — muncul hanya saat form aktif -->
+{#if spec}
+	<div
+		class="fixed inset-x-0 bottom-0 z-10 border-t bg-background/95 px-4 py-3 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/80"
+	>
+		<div class="mx-auto max-w-2xl">
+			<div class="mb-2 flex items-center justify-between gap-3">
+				<div class="flex items-center gap-2 text-sm">
+					<span class="font-medium text-foreground tabular-nums"
+						>{progress.filled}/{progress.total}</span
+					>
+					<span class="text-muted-foreground">item diisi</span>
+				</div>
+				<span
+					class={progress.pct === 100
+						? 'text-xs font-semibold text-green-600'
+						: 'text-xs text-muted-foreground'}
+				>
+					{progress.pct}%
+				</span>
+			</div>
+			<Progress
+				value={progress.pct}
+				class={progress.pct === 100 ? 'h-1.5 [&>div]:bg-green-500' : 'h-1.5'}
+			/>
+			<div class="mt-3 flex gap-2">
+				<Button
+					variant="outline"
+					class="flex-1"
+					onclick={() => {
+						resetFlow();
+						goto(resolve('/dashboard'));
+					}}
+				>
+					Batal
+				</Button>
+				<Button class="flex-[2]" disabled={submitting} onclick={() => submit()}>
+					{submitting
+						? 'Menyimpan...'
+						: progress.pct === 100
+							? '✓ Submit Inspeksi'
+							: `Submit (${progress.filled}/${progress.total})`}
+				</Button>
+			</div>
+		</div>
+	</div>
+{/if}
 
 <Dialog.Root bind:open={recheckDialogOpen}>
 	<Dialog.Content class="sm:max-w-md">

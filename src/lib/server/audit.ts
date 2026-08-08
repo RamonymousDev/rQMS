@@ -1,7 +1,12 @@
 import { error } from '@sveltejs/kit';
 import { db } from './db/index.js';
 import { auditLogs } from './db/schema.js';
-import type { SessionUser } from './auth.js';
+
+type AuditActor = {
+	id: string;
+	nik: string;
+	name: string;
+};
 
 type AuditOptions = {
 	action: string;
@@ -11,7 +16,7 @@ type AuditOptions = {
 	ipAddress?: string;
 };
 
-export async function logAction(user: SessionUser | null, opts: AuditOptions) {
+export async function logAction(user: AuditActor | null, opts: AuditOptions) {
 	try {
 		await db.insert(auditLogs).values({
 			actorId: user?.id ?? null,
@@ -27,7 +32,7 @@ export async function logAction(user: SessionUser | null, opts: AuditOptions) {
 	}
 }
 
-export async function requireActor(user: SessionUser | null): Promise<SessionUser> {
+export async function requireActor(user: AuditActor | null): Promise<AuditActor> {
 	if (!user) throw error(401, 'Tidak terautentikasi.');
 	return user;
 }

@@ -1,5 +1,10 @@
 import type { Handle } from '@sveltejs/kit';
-import { SESSION_COOKIE, verifySession } from '$lib/server/auth.js';
+import {
+	SESSION_COOKIE,
+	verifySession,
+	isSessionRevoked,
+	clearSessionCookie
+} from '$lib/server/auth.js';
 
 export const MAX_BODY_BYTES = 1024 * 1024;
 
@@ -9,7 +14,12 @@ export const handle: Handle = async ({ event, resolve }) => {
 	if (token) {
 		const user = await verifySession(token);
 		if (user) {
-			event.locals.user = user;
+			const revoked = await isSessionRevoked(user.jti);
+			if (revoked) {
+				clearSessionCookie(event.cookies);
+			} else {
+				event.locals.user = user;
+			}
 		}
 	}
 

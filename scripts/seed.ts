@@ -186,4 +186,21 @@ console.log(
 	`  config      : ${part64300.partNo} @ ${lineRsw.code} ${configCreated ? '(dibuat)' : '(sudah ada)'}`
 );
 
+// Trigger realtime board (CREATE OR REPLACE — aman dijalankan berulang)
+await sql`
+  CREATE OR REPLACE FUNCTION notify_board_update()
+  RETURNS trigger LANGUAGE plpgsql AS $$
+  BEGIN
+    PERFORM pg_notify('board_' || NEW.line_code, NEW.line_code);
+    RETURN NEW;
+  END;
+  $$
+`;
+await sql`
+  CREATE OR REPLACE TRIGGER trg_notify_board
+  AFTER INSERT OR UPDATE ON inspections
+  FOR EACH ROW EXECUTE FUNCTION notify_board_update()
+`;
+console.log('  trigger     : trg_notify_board (board realtime)');
+
 await sql.end();
