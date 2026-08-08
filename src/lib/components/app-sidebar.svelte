@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import type { ComponentProps } from 'svelte';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
+	import { useSidebar } from '$lib/components/ui/sidebar/context.svelte.js';
 	import type { SessionUser } from '$lib/server/auth.js';
 	import { ADMIN_PERMISSION } from '$lib/permissions.js';
 
@@ -16,6 +17,7 @@
 		permissionCodes: string[];
 	} = $props();
 
+	const sidebar = useSidebar();
 	const isAdmin = $derived(permissionCodes.includes(ADMIN_PERMISSION));
 
 	const navMain = $derived([
@@ -50,6 +52,12 @@
 				]
 			: [])
 	]);
+
+	function handleNavClick() {
+		if (sidebar.isMobile) {
+			sidebar.setOpenMobile(false);
+		}
+	}
 </script>
 
 <Sidebar.Root {...restProps} bind:ref>
@@ -71,7 +79,7 @@
 							<Sidebar.MenuItem>
 								<Sidebar.MenuButton isActive={page.url.pathname === item.url}>
 									{#snippet child({ props })}
-										<a href={item.url} {...props}>{item.title}</a>
+										<a href={item.url} {...props} onclick={handleNavClick}>{item.title}</a>
 									{/snippet}
 								</Sidebar.MenuButton>
 							</Sidebar.MenuItem>

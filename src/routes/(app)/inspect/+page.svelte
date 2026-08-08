@@ -15,6 +15,8 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
+	import { QrScanner } from '$lib/components/ui/qr-scanner/index.js';
+	import * as ToggleGroup from '$lib/components/ui/toggle-group/index.js';
 
 	type Line = { id: string; code: string; name: string; process?: { name: string } };
 
@@ -61,11 +63,9 @@
 	let preparing = $state(false);
 	let submitting = $state(false);
 	let recheckDialogOpen = $state(false);
-	/** Sekali operator menyetujui re-check, keputusan itu berlaku sampai flow direset. */
 	let recheckConfirmed = $state(false);
+	let inputMode: 'qr' | 'manual' = $state('manual');
 
-	// Jawaban operator — dikunci ke identitas item (bukan index) agar tetap
-	// cocok saat dikirim ke backend.
 	let pointAnswers: Record<string, { status: 'OK' | 'NG' | null; remarks: string }> = $state({});
 	let spotActual = $state('');
 	let hardwareAnswers: Record<string, { actualValue: string; remarks: string }> = $state({});
@@ -96,20 +96,38 @@
 		lengthAnswers = {};
 		visualStatus = null;
 		visualRemarks = '';
+		partNo = '';
+		inputMode = 'manual';
 	}
+
+	function resetForm() {
+		spec = null;
+		stage = null;
+		recheckConfirmed = false;
+		pointAnswers = {};
+		spotActual = '';
+		hardwareAnswers = {};
+		lengthAnswers = {};
+		visualStatus = null;
+		visualRemarks = '';
+	}
+
+	$effect(() => {
+		if (inputMode) resetForm();
+	});
 
 	function selectLine(line: Line) {
 		selectedLine = line;
-		partNo = '';
 		resetFlow();
 	}
 
-	/** Status spot/hardware/length dihitung juga di sini agar operator dapat
-	 *  umpan balik langsung — backend tetap menghitung ulang saat submit. */
-	function statusFor(actual: string, standard: number): 'OK' | 'NG' | null {
-		if (actual.trim() === '') return null;
+	function statusFor(actual: string | number, standard: number, exact = false): 'OK' | 'NG' | null {
+		if (actual === '' || actual === null || actual === undefined) return null;
 		const value = Number(actual);
 		if (!Number.isFinite(value)) return null;
+		if (exact) {
+			return value === standard ? 'OK' : 'NG';
+		}
 		return value >= standard ? 'OK' : 'NG';
 	}
 
@@ -193,7 +211,6 @@
 		};
 	}
 
-	/** Cek kelengkapan di klien; backend tetap sumber kebenaran (rule #1). */
 	function validate(): string | null {
 		if (!spec) return 'Form belum siap.';
 
@@ -206,12 +223,15 @@
 				}
 			}
 		}
-		if (spec.hasSpot && spotActual.trim() === '') return 'Spot actual belum diisi.';
+		if (spec.hasSpot) {
+			const spotValue = spotActual === '' ? null : Number(spotActual);
+			if (spotValue === null || !Number.isFinite(spotValue)) return 'Spot actual belum diisi.';
+		}
 
 		if (spec.hasHardware) {
 			for (const hw of spec.hardwares) {
 				const answer = hardwareAnswers[hw.hardwareId];
-				if (!answer?.actualValue.trim()) return `Hardware "${hw.hwNo}" belum diisi.`;
+				if (!answer?.actualValue) return `Hardware "${hw.hwNo}" belum diisi.`;
 				if (statusFor(answer.actualValue, hw.standardValue) === 'NG' && !answer.remarks.trim()) {
 					return `Remarks wajib diisi untuk Hardware "${hw.hwNo}" yang NG.`;
 				}
@@ -220,8 +240,11 @@
 		if (spec.hasLength) {
 			for (const length of spec.lengths) {
 				const answer = lengthAnswers[length.lengthNo];
-				if (!answer?.actualMm.trim()) return `Length "${length.lengthNo}" belum diisi.`;
-				if (statusFor(answer.actualMm, length.standardMm) === 'NG' && !answer.remarks.trim()) {
+				if (!answer?.actualMm) return `Length "${length.lengthNo}" belum diisi.`;
+				if (
+					statusFor(answer.actualMm, length.standardMm, true) === 'NG' &&
+					!answer.remarks.trim()
+				) {
 					return `Remarks wajib diisi untuk Length "${length.lengthNo}" yang NG.`;
 				}
 			}
@@ -271,8 +294,6 @@
 	function confirmRecheck() {
 		recheckDialogOpen = false;
 		recheckConfirmed = true;
-		// Dialog muncul saat prepare (form belum diisi) maupun saat submit ditolak
-		// 409. Submit ulang hanya kalau form memang sudah lengkap.
 		if (!validate()) submit();
 	}
 
@@ -280,6 +301,11 @@
 		recheckDialogOpen = false;
 		resetFlow();
 	}
+
+	const okBtnClass =
+		'bg-green-600 text-white hover:bg-green-700 focus-visible:ring-green-500/50 dark:bg-green-600 dark:hover:bg-green-700';
+	const ngBtnClass =
+		'bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500/50 dark:bg-red-600 dark:hover:bg-red-700';
 </script>
 
 <div class="grid gap-4">
@@ -320,13 +346,66 @@
 			</CardHeader>
 			<CardContent class="grid gap-4">
 				<div class="grid gap-2">
-					<Label for="partNo">Part No</Label>
-					<Input
-						id="partNo"
-						placeholder="Scan atau ketik part no..."
-						bind:value={partNo}
-						oninput={resetFlow}
-					/>
+					<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+						<Label for="partNo">Part No</Label>
+						<ToggleGroup.Root
+							type="single"
+							bind:value={inputMode}
+							variant="outline"
+							class="h-8 rounded-md"
+						>
+							<ToggleGroup.Item value="manual" class="h-7 px-2 text-xs">
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									width="14"
+									height="14"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									class="lucide lucide-keyboard"
+								>
+									<path d="M4 4h16v16H4z" />
+									<path d="M8 12h.01" />
+									<path d="M12 12h.01" />
+									<path d="M16 12h.01" />
+								</svg>
+								Manual
+							</ToggleGroup.Item>
+							<ToggleGroup.Item value="qr" class="h-7 px-2 text-xs">
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									width="14"
+									height="14"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									class="lucide lucide-camera"
+								>
+									<path
+										d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"
+									/>
+									<circle cx="12" cy="13" r="3" />
+								</svg>
+								QR Scan
+							</ToggleGroup.Item>
+						</ToggleGroup.Root>
+					</div>
+					{#if inputMode === 'qr'}
+						<QrScanner bind:value={partNo} scan={true} disabled={preparing} />
+					{:else}
+						<Input
+							id="partNo"
+							placeholder="Scan atau ketik part no..."
+							bind:value={partNo}
+							oninput={resetForm}
+						/>
+					{/if}
 				</div>
 				<div class="flex flex-wrap gap-2">
 					{#each STAGES as option (option)}
@@ -368,6 +447,7 @@
 										<Button
 											size="sm"
 											variant={pointAnswers[point.pointNo]?.status === 'OK' ? 'default' : 'outline'}
+											class={pointAnswers[point.pointNo]?.status === 'OK' ? okBtnClass : ''}
 											onclick={() => (pointAnswers[point.pointNo].status = 'OK')}
 										>
 											OK
@@ -377,6 +457,7 @@
 											variant={pointAnswers[point.pointNo]?.status === 'NG'
 												? 'destructive'
 												: 'outline'}
+											class={pointAnswers[point.pointNo]?.status === 'NG' ? ngBtnClass : ''}
 											onclick={() => (pointAnswers[point.pointNo].status = 'NG')}
 										>
 											NG
@@ -387,6 +468,8 @@
 									<Textarea
 										placeholder="Remarks wajib diisi..."
 										bind:value={pointAnswers[point.pointNo].remarks}
+										aria-invalid
+										class="bg-red-50 aria-invalid:border-b-destructive dark:bg-red-950/30"
 									/>
 								{/if}
 							</div>
@@ -403,13 +486,13 @@
 								<span class="text-sm text-muted-foreground">
 									Standard: {spec.spotStandard}
 								</span>
-								{#if statusFor(spotActual, spec.spotStandard ?? 0)}
+								{#if statusFor(spotActual, spec.spotStandard ?? 0, true)}
 									<Badge
-										variant={statusFor(spotActual, spec.spotStandard ?? 0) === 'OK'
+										variant={statusFor(spotActual, spec.spotStandard ?? 0, true) === 'OK'
 											? 'default'
 											: 'destructive'}
 									>
-										{statusFor(spotActual, spec.spotStandard ?? 0)}
+										{statusFor(spotActual, spec.spotStandard ?? 0, true)}
 									</Badge>
 								{/if}
 							</div>
@@ -448,6 +531,8 @@
 									<Textarea
 										placeholder="Remarks wajib diisi..."
 										bind:value={hardwareAnswers[hw.hardwareId].remarks}
+										aria-invalid
+										class="bg-red-50 aria-invalid:border-b-destructive dark:bg-red-950/30"
 									/>
 								{/if}
 							</div>
@@ -462,7 +547,8 @@
 						{#each spec.lengths as length (length.lengthNo)}
 							{@const status = statusFor(
 								lengthAnswers[length.lengthNo]?.actualMm ?? '',
-								length.standardMm
+								length.standardMm,
+								true
 							)}
 							<div class="grid gap-2 rounded-lg border p-3">
 								<div class="flex items-center justify-between gap-3">
@@ -484,6 +570,8 @@
 									<Textarea
 										placeholder="Remarks wajib diisi..."
 										bind:value={lengthAnswers[length.lengthNo].remarks}
+										aria-invalid
+										class="bg-red-50 aria-invalid:border-b-destructive dark:bg-red-950/30"
 									/>
 								{/if}
 							</div>
@@ -500,6 +588,7 @@
 								<Button
 									size="sm"
 									variant={visualStatus === 'OK' ? 'default' : 'outline'}
+									class={visualStatus === 'OK' ? okBtnClass : ''}
 									onclick={() => (visualStatus = 'OK')}
 								>
 									OK
@@ -507,13 +596,19 @@
 								<Button
 									size="sm"
 									variant={visualStatus === 'NG' ? 'destructive' : 'outline'}
+									class={visualStatus === 'NG' ? ngBtnClass : ''}
 									onclick={() => (visualStatus = 'NG')}
 								>
 									NG
 								</Button>
 							</div>
 							{#if visualStatus === 'NG'}
-								<Textarea placeholder="Remarks wajib diisi..." bind:value={visualRemarks} />
+								<Textarea
+									placeholder="Remarks wajib diisi..."
+									bind:value={visualRemarks}
+									aria-invalid
+									class="bg-red-50 aria-invalid:border-b-destructive dark:bg-red-950/30"
+								/>
 							{/if}
 						</div>
 					</div>

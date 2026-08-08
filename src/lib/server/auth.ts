@@ -50,3 +50,9 @@ export function setSessionCookie(cookies: Cookies, token: string): void {
 export function clearSessionCookie(cookies: Cookies): void {
 	cookies.delete(SESSION_COOKIE, { path: '/' });
 }
+
+export async function getSessionUser(cookies: Cookies): Promise<SessionUser | null> {
+	const token = cookies.get(SESSION_COOKIE);
+	if (!token) return null;
+	return verifySession(token);
+}

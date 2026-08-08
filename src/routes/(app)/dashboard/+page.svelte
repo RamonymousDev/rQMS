@@ -13,39 +13,18 @@
 	import * as Empty from '$lib/components/ui/empty/index.js';
 	import * as Alert from '$lib/components/ui/alert/index.js';
 	import { Progress } from '$lib/components/ui/progress/index.js';
-	import * as Avatar from '$lib/components/ui/avatar/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 
 	import MapPinIcon from '@lucide/svelte/icons/map-pin';
 	import ClipboardListIcon from '@lucide/svelte/icons/clipboard-list';
 	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
 	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
-	import UserIcon from '@lucide/svelte/icons/user';
 
 	const { data } = $props();
-	const user = $derived(data?.user ?? null);
 	const lines = $derived(data?.lines ?? []);
 	const inspections = $derived(data?.inspections ?? []);
 	const okCount = $derived(data?.okCount ?? 0);
 	const ngCount = $derived(data?.ngCount ?? 0);
-
-	const today = new Date().toLocaleDateString('id-ID', {
-		weekday: 'long',
-		year: 'numeric',
-		month: 'long',
-		day: 'numeric'
-	});
-
-	function getInitials(name: string) {
-		return name
-			.split(' ')
-			.map((n) => n[0])
-			.join('')
-			.slice(0, 2)
-			.toUpperCase();
-	}
-
-	const initials = $derived(getInitials(user?.name ?? user?.nik ?? 'U'));
 
 	function computeOkRate(ok: number, ng: number) {
 		const total = ok + ng;
@@ -56,23 +35,6 @@
 </script>
 
 <div class="flex flex-col gap-6">
-	<header class="flex items-center justify-between">
-		<div class="flex items-center gap-3">
-			<Avatar.Root class="size-10">
-				<Avatar.Fallback>{initials}</Avatar.Fallback>
-			</Avatar.Root>
-			<div>
-				<h1 class="text-2xl font-semibold">Dashboard</h1>
-				<p class="text-sm text-muted-foreground">Halo, {user?.name ?? user?.nik ?? 'Operator'}</p>
-			</div>
-		</div>
-		<div class="flex items-center gap-2 text-sm text-muted-foreground">
-			<UserIcon class="size-4" />
-			<span class="hidden sm:inline">{today}</span>
-			<span class="sm:hidden">{new Date().toLocaleDateString('id-ID')}</span>
-		</div>
-	</header>
-
 	<Alert.Root>
 		<TriangleAlertIcon class="size-4" />
 		<Alert.Title>Selamat datang di QMS Dashboard</Alert.Title>
