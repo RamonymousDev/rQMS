@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { Badge } from '$lib/components/ui/badge/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as Tabs from '$lib/components/ui/tabs/index.js';
 	import {
@@ -14,11 +16,13 @@
 	import * as Alert from '$lib/components/ui/alert/index.js';
 	import { Progress } from '$lib/components/ui/progress/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
+	import { getShift } from '$lib/shift.js';
 
 	import MapPinIcon from '@lucide/svelte/icons/map-pin';
 	import ClipboardListIcon from '@lucide/svelte/icons/clipboard-list';
 	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
 	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
+	import ClockIcon from '@lucide/svelte/icons/clock';
 
 	const { data } = $props();
 	const lines = $derived(data?.lines ?? []);
@@ -32,16 +36,48 @@
 	}
 
 	const okRate = $derived(computeOkRate(okCount, ngCount));
+
+	let now = $state(new Date());
+	let shift = $derived(getShift(now));
+
+	onMount(() => {
+		const interval = setInterval(() => {
+			now = new Date();
+		}, 60000);
+		return () => clearInterval(interval);
+	});
+
+	const timeString = $derived(
+		now.toLocaleTimeString('id-ID', {
+			hour: '2-digit',
+			minute: '2-digit',
+			second: '2-digit'
+		})
+	);
+	const dateString = $derived(
+		now.toLocaleDateString('id-ID', {
+			weekday: 'short',
+			day: 'numeric',
+			month: 'short'
+		})
+	);
 </script>
 
 <div class="flex flex-col gap-6">
-	<Alert.Root>
-		<TriangleAlertIcon class="size-4" />
-		<Alert.Title>Selamat datang di QMS Dashboard</Alert.Title>
-		<Alert.Description>
-			Pantau status inspeksi dan akses line produksi Anda dari sini.
-		</Alert.Description>
-	</Alert.Root>
+	<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+		<Alert.Root>
+			<TriangleAlertIcon class="size-4" />
+			<Alert.Title>Selamat datang di QMS Dashboard</Alert.Title>
+			<Alert.Description>
+				Pantau status inspeksi dan akses line produksi Anda dari sini.
+			</Alert.Description>
+		</Alert.Root>
+		<div class="flex items-center gap-3 text-sm text-muted-foreground">
+			<ClockIcon class="size-4" />
+			<span>{dateString} · {timeString}</span>
+			<Badge variant={shift === 'DAY' ? 'default' : 'secondary'}>Shift {shift}</Badge>
+		</div>
+	</div>
 
 	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
 		<Card.Root>
@@ -99,11 +135,16 @@
 			{#if lines.length === 0}
 				<Empty.Root>
 					<Empty.Media>
-						<MapPinIcon class="size-10 text-muted-foreground" />
+						<MapPinIcon class="size-12 text-muted-foreground" />
 					</Empty.Media>
 					<Empty.Header>
-						<Empty.Title>No accessible lines</Empty.Title>
-						<Empty.Description>Anda belum memiliki akses ke line manapun.</Empty.Description>
+						<Empty.Title>Belum ada akses line</Empty.Title>
+						<Empty.Description>
+							Anda belum memiliki akses ke line manapun. Hubungi admin untuk mendapatkan permission.
+						</Empty.Description>
+						<Empty.Content>
+							<Button variant="outline" size="sm" href="/admin/lines">Kelola Line</Button>
+						</Empty.Content>
 					</Empty.Header>
 				</Empty.Root>
 			{:else}
@@ -135,11 +176,16 @@
 			{#if inspections.length === 0}
 				<Empty.Root>
 					<Empty.Media>
-						<ClipboardListIcon class="size-10 text-muted-foreground" />
+						<ClipboardListIcon class="size-12 text-muted-foreground" />
 					</Empty.Media>
 					<Empty.Header>
-						<Empty.Title>No recent inspections</Empty.Title>
-						<Empty.Description>Belum ada hasil inspeksi yang tercatat.</Empty.Description>
+						<Empty.Title>Belum ada inspeksi</Empty.Title>
+						<Empty.Description>
+							Mulai lakukan inspeksi pertama Anda untuk melihat hasil di sini.
+						</Empty.Description>
+						<Empty.Content>
+							<Button variant="default" size="sm" href="/inspect">Mulai Inspeksi</Button>
+						</Empty.Content>
 					</Empty.Header>
 				</Empty.Root>
 			{:else}
@@ -177,6 +223,9 @@
 							{/each}
 						</TableBody>
 					</Table>
+				</div>
+				<div class="mt-3 flex justify-end">
+					<Button variant="ghost" size="sm" href="/admin/inspections">Lihat Semua</Button>
 				</div>
 			{/if}
 		</Tabs.Content>

@@ -129,10 +129,23 @@
 			loggingOut = false;
 		}
 	}
+
+	function handleKeydown(e: KeyboardEvent) {
+		if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+			e.preventDefault();
+			settingsOpen = !settingsOpen;
+		}
+	}
 </script>
 
+<svelte:window on:keydown={handleKeydown} />
+
 <Sidebar.Provider>
-	<AppSidebar user={data.user} permissionCodes={data.permissionCodes} />
+	<AppSidebar
+		user={data.user}
+		permissionCodes={data.permissionCodes}
+		ngInspectionCount={data.ngInspectionCount}
+	/>
 	<Sidebar.Inset>
 		<header class="flex h-16 shrink-0 items-center gap-2 border-b px-4">
 			<Sidebar.Trigger class="-ms-1" />
@@ -225,21 +238,6 @@
 			<Button variant="outline" onclick={() => (changePasswordOpen = false)}>Batal</Button>
 			<Button disabled={changing} onclick={submitChangePassword}>
 				{changing ? 'Menyimpan...' : 'Simpan'}
-			</Button>
-		</Dialog.Footer>
-	</Dialog.Content>
-</Dialog.Root>
-
-<Dialog.Root bind:open={logoutConfirmOpen}>
-	<Dialog.Content class="sm:max-w-md">
-		<Dialog.Header>
-			<Dialog.Title>Konfirmasi Logout</Dialog.Title>
-			<Dialog.Description>Apakah Anda yakin ingin keluar dari sistem?</Dialog.Description>
-		</Dialog.Header>
-		<Dialog.Footer>
-			<Button variant="outline" onclick={() => (logoutConfirmOpen = false)}>Batal</Button>
-			<Button disabled={loggingOut} variant="destructive" onclick={confirmLogout}>
-				{loggingOut ? 'Keluar...' : 'Ya, Logout'}
 			</Button>
 		</Dialog.Footer>
 	</Dialog.Content>

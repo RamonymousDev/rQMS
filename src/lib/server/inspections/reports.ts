@@ -110,3 +110,11 @@ export async function getInspection(id: string) {
 	if (!row) throw error(404, 'Inspeksi tidak ditemukan.');
 	return row;
 }
+
+export async function countNgInspections() {
+	const [result] = await db
+		.select({ value: count() })
+		.from(inspections)
+		.where(eq(inspections.overallStatus, 'NG'));
+	return result.value;
+}

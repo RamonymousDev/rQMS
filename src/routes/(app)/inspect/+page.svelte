@@ -1,5 +1,7 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { beforeNavigate, goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { onMount, onDestroy } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -14,6 +16,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
+	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { QrScanner } from '$lib/components/ui/qr-scanner/index.js';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group/index.js';
@@ -73,6 +76,62 @@
 	let visualStatus: 'OK' | 'NG' | null = $state(null);
 	let visualRemarks = $state('');
 
+	let isDirty = $state(false);
+	let currentStep = $derived.by(() => {
+		if (!selectedLine) return 1;
+		if (!spec) return 2;
+		return 3;
+	});
+
+	const STORAGE_KEY = 'inspect-draft';
+
+	function saveDraft() {
+		if (!isDirty) return;
+		const draft = {
+			partNo,
+			inputMode,
+			pointAnswers,
+			spotActual,
+			hardwareAnswers,
+			lengthAnswers,
+			visualStatus,
+			visualRemarks
+		};
+		try {
+			localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
+		} catch {
+			// ignore storage errors
+		}
+	}
+
+	function restoreDraft() {
+		try {
+			const raw = localStorage.getItem(STORAGE_KEY);
+			if (!raw) return;
+			const draft = JSON.parse(raw);
+			if (draft.partNo) partNo = draft.partNo;
+			if (draft.inputMode) inputMode = draft.inputMode;
+			if (draft.pointAnswers) pointAnswers = draft.pointAnswers;
+			if (draft.spotActual) spotActual = draft.spotActual;
+			if (draft.hardwareAnswers) hardwareAnswers = draft.hardwareAnswers;
+			if (draft.lengthAnswers) lengthAnswers = draft.lengthAnswers;
+			if (draft.visualStatus) visualStatus = draft.visualStatus;
+			if (draft.visualRemarks) visualRemarks = draft.visualRemarks;
+			isDirty = true;
+		} catch {
+			// ignore parse errors
+		}
+	}
+
+	function clearDraft() {
+		try {
+			localStorage.removeItem(STORAGE_KEY);
+		} catch {
+			// ignore
+		}
+		isDirty = false;
+	}
+
 	onMount(async () => {
 		try {
 			const res = await fetch('/api/inspect/lines');
@@ -81,10 +140,16 @@
 				return;
 			}
 			lines = (await res.json()).data ?? [];
+			restoreDraft();
 		} finally {
 			loadingLines = false;
 		}
 	});
+
+	function markDirty() {
+		isDirty = true;
+		saveDraft();
+	}
 
 	function resetFlow() {
 		spec = null;
@@ -98,6 +163,7 @@
 		visualRemarks = '';
 		partNo = '';
 		inputMode = 'manual';
+		clearDraft();
 	}
 
 	function resetForm() {
@@ -110,15 +176,40 @@
 		lengthAnswers = {};
 		visualStatus = null;
 		visualRemarks = '';
+		markDirty();
+	}
+
+	function handleKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape') {
+			if (recheckDialogOpen) {
+				recheckDialogOpen = false;
+				return;
+			}
+			if (spec) {
+				resetFlow();
+			}
+		}
+		if (e.key === 'Enter' && !e.shiftKey) {
+			if (spec && !submitting) {
+				e.preventDefault();
+				submit();
+			}
+		}
 	}
 
 	$effect(() => {
-		if (inputMode) resetForm();
+		window.addEventListener('keydown', handleKeydown);
+		return () => window.removeEventListener('keydown', handleKeydown);
+	});
+
+	beforeNavigate(() => {
+		if (!isDirty) return;
+		clearDraft();
 	});
 
 	function selectLine(line: Line) {
 		selectedLine = line;
-		resetFlow();
+		resetForm();
 	}
 
 	function statusFor(actual: string | number, standard: number, exact = false): 'OK' | 'NG' | null {
@@ -170,6 +261,7 @@
 			spotActual = '';
 			visualStatus = null;
 			visualRemarks = '';
+			markDirty();
 
 			if (data.requiresRecheckConfirm) recheckDialogOpen = true;
 		} finally {
@@ -283,7 +375,45 @@
 				toast.error(body?.message ?? 'Gagal menyimpan inspeksi.');
 				return;
 			}
-			toast.success(`Inspeksi tersimpan. Overall status: ${body.data.overallStatus}.`);
+
+			const okCount =
+				(payload.points?.filter((p) => p.status === 'OK').length ?? 0) +
+				(payload.hardwares?.filter(
+					(h) =>
+						statusFor(
+							h.actualValue,
+							spec!.hardwares.find((x) => x.hardwareId === h.hardwareId)!.standardValue
+						) === 'OK'
+				).length ?? 0) +
+				(payload.lengths?.filter(
+					(l) =>
+						statusFor(
+							l.actualMm,
+							spec!.lengths.find((x) => x.lengthNo === l.lengthNo)!.standardMm,
+							true
+						) === 'OK'
+				).length ?? 0);
+			const ngCount =
+				(payload.points?.filter((p) => p.status === 'NG').length ?? 0) +
+				(payload.hardwares?.filter(
+					(h) =>
+						statusFor(
+							h.actualValue,
+							spec!.hardwares.find((x) => x.hardwareId === h.hardwareId)!.standardValue
+						) === 'NG'
+				).length ?? 0) +
+				(payload.lengths?.filter(
+					(l) =>
+						statusFor(
+							l.actualMm,
+							spec!.lengths.find((x) => x.lengthNo === l.lengthNo)!.standardMm,
+							true
+						) === 'NG'
+				).length ?? 0);
+
+			toast.success(
+				`Inspeksi tersimpan. Overall: ${body.data.overallStatus}. Detail: ${okCount} OK, ${ngCount} NG.`
+			);
 			partNo = '';
 			resetFlow();
 		} finally {
@@ -300,15 +430,53 @@
 	function cancelRecheck() {
 		recheckDialogOpen = false;
 		resetFlow();
+		goto(resolve('/dashboard'));
 	}
 
 	const okBtnClass =
 		'bg-green-600 text-white hover:bg-green-700 focus-visible:ring-green-500/50 dark:bg-green-600 dark:hover:bg-green-700';
 	const ngBtnClass =
 		'bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500/50 dark:bg-red-600 dark:hover:bg-red-700';
+
+	onDestroy(() => {
+		clearDraft();
+	});
 </script>
 
+<svelte:window on:beforeunload={() => (isDirty ? '' : undefined)} />
+
 <div class="grid gap-4">
+	<Card>
+		<CardContent class="pt-6">
+			<div class="flex items-center justify-between">
+				{#each [1, 2, 3] as step (step)}
+					<div class="flex items-center gap-2">
+						<div
+							class="flex size-8 items-center justify-center rounded-full border-2 text-sm font-semibold"
+							class:border-primary={currentStep >= step}
+							class:bg-primary={currentStep >= step}
+							class:text-primary-foreground={currentStep >= step}
+							class:border-muted={currentStep < step}
+							class:text-muted-foreground={currentStep < step}
+						>
+							{step}
+						</div>
+						<span class="text-sm font-medium">
+							{step === 1 ? 'Pilih Line' : step === 2 ? 'Scan Part' : 'Isi Form'}
+						</span>
+					</div>
+					{#if step < 3}
+						<div
+							class="mx-2 h-0.5 flex-1"
+							class:bg-primary={currentStep > step}
+							class:bg-muted={currentStep <= step}
+						></div>
+					{/if}
+				{/each}
+			</div>
+		</CardContent>
+	</Card>
+
 	<!-- Step 1: pilih line -->
 	<Card>
 		<CardHeader>
@@ -317,7 +485,11 @@
 		</CardHeader>
 		<CardContent>
 			{#if loadingLines}
-				<p class="text-sm text-muted-foreground">Memuat daftar line...</p>
+				<div class="flex flex-wrap gap-2">
+					{#each [0, 1, 2, 3, 4, 5] as idx (idx)}
+						<Skeleton class="h-9 w-32" />
+					{/each}
+				</div>
 			{:else if lines.length === 0}
 				<p class="text-sm text-muted-foreground">
 					Tidak ada line yang bisa Anda akses. Hubungi admin untuk mendapatkan permission.
@@ -403,7 +575,7 @@
 							id="partNo"
 							placeholder="Scan atau ketik part no..."
 							bind:value={partNo}
-							oninput={resetForm}
+							oninput={markDirty}
 						/>
 					{/if}
 				</div>
@@ -419,7 +591,9 @@
 					{/each}
 				</div>
 				{#if preparing}
-					<p class="text-sm text-muted-foreground">Menyiapkan form...</p>
+					<div class="flex items-center gap-2">
+						<Skeleton class="h-4 w-32" />
+					</div>
 				{/if}
 			</CardContent>
 		</Card>
@@ -496,7 +670,13 @@
 									</Badge>
 								{/if}
 							</div>
-							<Input type="number" min="0" placeholder="Actual" bind:value={spotActual} />
+							<Input
+								type="number"
+								min="0"
+								placeholder="Actual"
+								bind:value={spotActual}
+								oninput={markDirty}
+							/>
 						</div>
 					</div>
 					<Separator />
@@ -526,6 +706,7 @@
 									min="0"
 									placeholder={`Actual (${hw.unit})`}
 									bind:value={hardwareAnswers[hw.hardwareId].actualValue}
+									oninput={markDirty}
 								/>
 								{#if status === 'NG'}
 									<Textarea
@@ -565,6 +746,7 @@
 									min="0"
 									placeholder="Actual (mm)"
 									bind:value={lengthAnswers[length.lengthNo].actualMm}
+									oninput={markDirty}
 								/>
 								{#if status === 'NG'}
 									<Textarea
@@ -589,7 +771,10 @@
 									size="sm"
 									variant={visualStatus === 'OK' ? 'default' : 'outline'}
 									class={visualStatus === 'OK' ? okBtnClass : ''}
-									onclick={() => (visualStatus = 'OK')}
+									onclick={() => {
+										visualStatus = 'OK';
+										markDirty();
+									}}
 								>
 									OK
 								</Button>
@@ -597,7 +782,10 @@
 									size="sm"
 									variant={visualStatus === 'NG' ? 'destructive' : 'outline'}
 									class={visualStatus === 'NG' ? ngBtnClass : ''}
-									onclick={() => (visualStatus = 'NG')}
+									onclick={() => {
+										visualStatus = 'NG';
+										markDirty();
+									}}
 								>
 									NG
 								</Button>
@@ -615,7 +803,13 @@
 				{/if}
 
 				<div class="flex justify-end gap-2">
-					<Button variant="outline" onclick={resetFlow}>Batal</Button>
+					<Button
+						variant="outline"
+						onclick={() => {
+							resetFlow();
+							goto(resolve('/dashboard'));
+						}}>Batal</Button
+					>
 					<Button disabled={submitting} onclick={() => submit()}>
 						{submitting ? 'Menyimpan...' : 'Submit Inspeksi'}
 					</Button>
