@@ -7,6 +7,7 @@ import {
 	integer,
 	timestamp,
 	text,
+	jsonb,
 	uniqueIndex,
 	index
 } from 'drizzle-orm/pg-core';
@@ -102,6 +103,7 @@ export const users = pgTable('users', {
 	nik: varchar('nik', { length: 20 }).notNull().unique(),
 	name: varchar('name', { length: 100 }).notNull(),
 	password: varchar('password', { length: 255 }).notNull(), // hashed
+	passwordHistory: jsonb('password_history').$type<string[]>().default([]).notNull(),
 	isActive: boolean('is_active').default(true).notNull(),
 	createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 	updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull()
@@ -448,5 +450,27 @@ export const inspectionLengthsRelations = relations(inspectionLengths, ({ one })
 	inspection: one(inspections, {
 		fields: [inspectionLengths.inspectionId],
 		references: [inspections.id]
+	})
+}));
+
+// ======================
+// AUDIT LOGS
+// ======================
+export const auditLogs = pgTable('audit_logs', {
+	id: uuid('id').defaultRandom().primaryKey(),
+	actorId: uuid('actor_id').references(() => users.id),
+	actorNik: varchar('actor_nik', { length: 20 }),
+	action: varchar('action', { length: 100 }).notNull(),
+	entity: varchar('entity', { length: 100 }),
+	entityId: varchar('entity_id', { length: 100 }),
+	metadata: jsonb('metadata').default({}),
+	ipAddress: varchar('ip_address', { length: 45 }),
+	createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull()
+});
+
+export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
+	actor: one(users, {
+		fields: [auditLogs.actorId],
+		references: [users.id]
 	})
 }));

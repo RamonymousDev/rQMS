@@ -82,6 +82,7 @@
 	"dependencies": {
 		"argon2": "^0.45.1",
 		"html5-qrcode": "^2.3.8",
+		"ioredis": "^6.0.0",
 		"jose": "^6.2.8",
 		"zod": "^4.4.3"
 	}

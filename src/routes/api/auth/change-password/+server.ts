@@ -3,14 +3,22 @@ import { json } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
 import { db } from '$lib/server/db/index.js';
 import { users } from '$lib/server/db/schema.js';
-import { hashPassword, verifyPassword } from '$lib/server/password.js';
+import {
+	hashPassword,
+	verifyPassword,
+	validatePasswordStrength,
+	isPasswordReused
+} from '$lib/server/password.js';
 import { getSessionUser } from '$lib/server/auth.js';
+import { enforceRateLimit } from '$lib/server/rate-limit.js';
 
-export const POST = async ({ cookies, request }) => {
-	const session = await getSessionUser(cookies);
+export const POST = async (event) => {
+	const session = await getSessionUser(event.cookies);
 	if (!session) throw error(401, 'Belum login.');
 
-	const body = await request.json().catch(() => null);
+	await enforceRateLimit('admin', event.getClientAddress());
+
+	const body = await event.request.json().catch(() => null);
 	if (!body || typeof body.currentPassword !== 'string' || typeof body.newPassword !== 'string') {
 		throw error(400, 'Payload tidak valid.');
 	}
@@ -23,14 +31,22 @@ export const POST = async ({ cookies, request }) => {
 	const valid = await verifyPassword(row.password, body.currentPassword);
 	if (!valid) throw error(400, 'Password saat ini salah.');
 
-	if (body.newPassword.length < 6) {
-		throw error(400, 'Password baru minimal 6 karakter.');
+	const strength = validatePasswordStrength(body.newPassword);
+	if (!strength.valid) {
+		throw error(400, strength.message);
+	}
+
+	const reused = await isPasswordReused(body.newPassword, row.passwordHistory ?? []);
+	if (reused) {
+		throw error(400, 'Password baru tidak boleh sama dengan 5 password sebelumnya.');
 	}
 
 	const hashed = await hashPassword(body.newPassword);
+	const history = [...(row.passwordHistory ?? []), hashed].slice(-5);
+
 	await db
 		.update(users)
-		.set({ password: hashed, updatedAt: new Date() })
+		.set({ password: hashed, passwordHistory: history, updatedAt: new Date() })
 		.where(eq(users.id, session.id));
 
 	return json({ ok: true });

@@ -2,13 +2,25 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types.js';
 import { requireAdmin } from '$lib/server/master/admin.js';
 import { getConfig, updateConfig } from '$lib/server/configs/index.js';
+import { enforceRateLimit } from '$lib/server/rate-limit.js';
+import { logAction } from '$lib/server/audit.js';
 
-export const GET: RequestHandler = async ({ locals, params }) => {
-	await requireAdmin(locals.user);
-	return json({ data: await getConfig(params.id) });
+export const GET: RequestHandler = async (event) => {
+	await requireAdmin(event.locals.user);
+	await enforceRateLimit('admin', event.getClientAddress());
+	return json({ data: await getConfig(event.params.id) });
 };
 
-export const PATCH: RequestHandler = async ({ locals, params, request }) => {
-	await requireAdmin(locals.user);
-	return json({ data: await updateConfig(params.id, await request.json()) });
+export const PATCH: RequestHandler = async (event) => {
+	await requireAdmin(event.locals.user);
+	await enforceRateLimit('admin', event.getClientAddress());
+	const body = await event.request.json();
+	const data = await updateConfig(event.params.id, body);
+	await logAction(event.locals.user, {
+		action: 'update_config',
+		entity: 'configs',
+		entityId: event.params.id,
+		metadata: body
+	});
+	return json({ data });
 };
