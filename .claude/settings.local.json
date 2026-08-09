@@ -1,17 +1,21 @@
 {
-	"permissions": {
-		"allow": [
-			"Bash(bun run *)",
-			"Read(//tmp/**)",
-			"Bash(rm -f a.jar)",
-			"Bash(curl -s -c a.jar -o /dev/null -X POST http://localhost:5173/login -H \"content-type: application/x-www-form-urlencoded\" --data \"nik=ADMIN001&password=password123\")",
-			"Bash(curl -s -b a.jar -o /dev/null -w \"  status=%{http_code}\\\\n\" http://localhost:5173/dashboard)",
-			"Bash(curl -s -o /dev/null -w \"  status=%{http_code}\\\\n\" http://localhost:5173/login)",
-			"Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('deps:', Object.keys\\(p.dependencies||{}\\).join\\(', '\\)\\); console.log\\(\\); console.log\\('sonner di devDeps?', 'svelte-sonner' in \\(p.devDependencies||{}\\)\\)\")",
-			"Bash(cp /tmp/probe.mjs ./probe.mjs)",
-			"Bash(node ./probe.mjs)",
-			"Bash(ps -eo pid,lstart,etime,cmd)",
-			"*"
-		]
-	}
+  "permissions": {
+    "allow": [
+      "Bash(bun run *)",
+      "Read(//tmp/**)",
+      "Bash(rm -f a.jar)",
+      "Bash(curl -s -c a.jar -o /dev/null -X POST http://localhost:5173/login -H \"content-type: application/x-www-form-urlencoded\" --data \"nik=ADMIN001&password=password123\")",
+      "Bash(curl -s -b a.jar -o /dev/null -w \"  status=%{http_code}\\\\n\" http://localhost:5173/dashboard)",
+      "Bash(curl -s -o /dev/null -w \"  status=%{http_code}\\\\n\" http://localhost:5173/login)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('deps:', Object.keys\\(p.dependencies||{}\\).join\\(', '\\)\\); console.log\\(\\); console.log\\('sonner di devDeps?', 'svelte-sonner' in \\(p.devDependencies||{}\\)\\)\")",
+      "Bash(cp /tmp/probe.mjs ./probe.mjs)",
+      "Bash(node ./probe.mjs)",
+      "Bash(ps -eo pid,lstart,etime,cmd)",
+      "*",
+      "Bash(curl -s --max-time 15 http://localhost:5173/board/RSW -o /tmp/b1.html -w \"HTTP %{http_code}\\\\n\")",
+      "Bash(git check-ignore *)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
+    ]
+  }
 }
