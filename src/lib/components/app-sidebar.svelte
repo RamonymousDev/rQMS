@@ -17,6 +17,7 @@
 	import UsersIcon from '@lucide/svelte/icons/users';
 	import Link2Icon from '@lucide/svelte/icons/link-2';
 	import FileCheckIcon from '@lucide/svelte/icons/file-check';
+	import ScrollTextIcon from '@lucide/svelte/icons/scroll-text';
 
 	let {
 		ref = $bindable(null),
@@ -43,7 +44,8 @@
 		Hardware: WrenchIcon,
 		User: UsersIcon,
 		'Part + Line': Link2Icon,
-		'Hasil Inspeksi': FileCheckIcon
+		'Hasil Inspeksi': FileCheckIcon,
+		'Audit Log': ScrollTextIcon
 	};
 
 	const navMain = $derived([
@@ -73,7 +75,10 @@
 					},
 					{
 						title: 'Monitoring',
-						items: [{ title: 'Hasil Inspeksi', url: resolve('/admin/inspections') }]
+						items: [
+							{ title: 'Hasil Inspeksi', url: resolve('/admin/inspections') },
+							{ title: 'Audit Log', url: resolve('/admin/audit') }
+						]
 					}
 				]
 			: [])

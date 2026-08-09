@@ -31,7 +31,8 @@
 		hardwares: 'Hardware',
 		users: 'User',
 		configs: 'Konfigurasi',
-		inspections: 'Hasil Inspeksi'
+		inspections: 'Hasil Inspeksi',
+		audit: 'Audit Log'
 	};
 
 	function getBreadcrumbs() {
