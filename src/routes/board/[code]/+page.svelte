@@ -13,16 +13,18 @@
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+	import SunIcon from '@lucide/svelte/icons/sun';
+	import MoonIcon from '@lucide/svelte/icons/moon';
 	import PartCard from '$lib/components/board/part-card.svelte';
 	import StatusSummary from '$lib/components/board/status-summary.svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { Input } from '$lib/components/ui/input/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
+	import DatePicker from '$lib/components/date-picker.svelte';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { cn } from '$lib/utils.js';
-	import { applyTheme, getInitialTheme } from '$lib/theme/index.js';
+	import { mode, toggleMode } from 'mode-watcher';
 
 	const { data }: { data: PageData } = $props();
 
@@ -36,6 +38,8 @@
 
 	let tvMode = $state(false);
 	let clockTime = $state('');
+
+	const isDark = $derived(mode.current === 'dark');
 
 	function updateClock() {
 		const n = new Date();
@@ -52,14 +56,6 @@
 		if (!tvMode) return;
 		const interval = setInterval(updateClock, 1000);
 		return () => clearInterval(interval);
-	});
-
-	$effect(() => {
-		if (tvMode) {
-			applyTheme('dark');
-		} else {
-			applyTheme(getInitialTheme());
-		}
 	});
 
 	$effect(() => {
@@ -176,26 +172,16 @@
 	<title>Ringkasan Part · {data.line.name} · QMS</title>
 </svelte:head>
 
-<div
-	class={cn(
-		'min-h-screen overflow-x-hidden bg-background transition-colors',
-		tvMode && 'bg-black text-white'
-	)}
->
+<div class={cn('min-h-screen overflow-x-hidden bg-background transition-colors')}>
 	<!-- Header -->
-	<header
-		class={cn('border-b bg-card px-6 py-5 transition-colors', tvMode && 'border-white/10 bg-black')}
-	>
+	<header class={cn('border-b bg-card px-6 py-5 transition-colors')}>
 		<div
 			class="mx-auto flex max-w-6xl flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"
 		>
 			<div class="min-w-0">
 				<div class="flex flex-wrap items-center gap-2.5">
 					<h1 class="text-2xl font-bold tracking-tight">Ringkasan Part</h1>
-					<Badge
-						variant="secondary"
-						class={cn('font-mono text-xs', tvMode && 'border-white/20 bg-white/10 text-white')}
-					>
+					<Badge variant="secondary" class="font-mono text-xs">
 						{data.line.code}
 					</Badge>
 					{#if sseConnected}
@@ -212,19 +198,14 @@
 						</span>
 					{/if}
 				</div>
-				<p class={cn('mt-1.5 text-sm text-muted-foreground', tvMode && 'text-white/60')}>
+				<p class="mt-1.5 text-sm text-muted-foreground">
 					{data.line.name} · Klik badge stage untuk melihat riwayat inspeksi shift tersebut.
 				</p>
 			</div>
 
 			<div class="flex w-full flex-col items-start gap-3 lg:w-auto lg:items-end">
 				<!-- Legend -->
-				<div
-					class={cn(
-						'flex flex-wrap items-center gap-4 text-xs',
-						tvMode ? 'text-white/50' : 'text-muted-foreground'
-					)}
-				>
+				<div class="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
 					<div class="flex items-center gap-1.5">
 						<span class="h-3 w-3 rounded-full bg-green-500"></span>
 						<span>OK</span>
@@ -241,10 +222,7 @@
 
 				<!-- Actions: Mode TV + Navigasi Tanggal, dikelompokkan jadi satu toolbar -->
 				<div
-					class={cn(
-						'flex flex-wrap items-center gap-1 rounded-lg border p-1',
-						tvMode ? 'border-white/10 bg-white/5' : 'border-border bg-muted/40'
-					)}
+					class="flex flex-wrap items-center gap-1 rounded-lg border border-border bg-muted/40 p-1"
 				>
 					<Button
 						variant={tvMode ? 'default' : 'ghost'}
@@ -259,6 +237,20 @@
 						Mode TV
 					</Button>
 
+					<Button
+						variant="ghost"
+						size="sm"
+						class="h-8 w-8 p-0"
+						aria-label={isDark ? 'Mode terang' : 'Mode gelap'}
+						onclick={toggleMode}
+					>
+						{#if isDark}
+							<SunIcon class="h-4 w-4" />
+						{:else}
+							<MoonIcon class="h-4 w-4" />
+						{/if}
+					</Button>
+
 					{#if !tvMode}
 						<Separator orientation="vertical" class="mx-0.5 h-5" />
 						<div class="flex items-center">
@@ -271,13 +263,12 @@
 							>
 								<ChevronLeftIcon class="h-4 w-4" />
 							</Button>
-							<Input
-								type="date"
-								max={todayDate}
+							<DatePicker
 								value={viewDate}
+								maxKey={todayDate}
+								onSelect={goToDate}
 								aria-label="Tanggal operasional"
 								class="h-8 w-[9.5rem] border-0 bg-transparent text-xs shadow-none"
-								onchange={(e) => goToDate(e.currentTarget.value)}
 							/>
 							<Button
 								variant="ghost"
@@ -309,11 +300,11 @@
 		{#if tvMode}
 			<div class="mx-auto mt-5 flex max-w-6xl flex-col items-center">
 				<p
-					class="font-mono text-7xl font-bold tracking-tight text-amber-400 tabular-nums sm:text-8xl"
+					class="font-mono text-7xl font-bold tracking-tight text-amber-600 tabular-nums sm:text-8xl dark:text-amber-400"
 				>
 					{clockTime}
 				</p>
-				<p class="mt-2 text-lg text-white/70">
+				<p class="mt-2 text-lg text-muted-foreground">
 					{shiftLabel} · {dateLabel}
 				</p>
 			</div>
@@ -343,12 +334,7 @@
 	-->
 	<main class={cn('mx-auto max-w-6xl px-6 py-6', tvMode && 'w-full max-w-none px-8 py-8')}>
 		{#if parts.length === 0}
-			<div
-				class={cn(
-					'flex flex-col items-center gap-2 py-20 text-center text-muted-foreground',
-					tvMode && 'text-white/60'
-				)}
-			>
+			<div class="flex flex-col items-center gap-2 py-20 text-center text-muted-foreground">
 				<p class="text-lg font-medium">Belum ada part terkonfigurasi</p>
 				<p class="text-sm">Tambahkan konfigurasi part untuk line ini terlebih dahulu.</p>
 			</div>

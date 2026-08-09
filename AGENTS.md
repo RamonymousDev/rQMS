@@ -104,7 +104,6 @@ src/
 │   ├── permissions.ts          # ADMIN_PERMISSION constant (CLIENT-SAFE)
 │   ├── shift.ts                # getShift() versi client-safe (hanya getShift)
 │   ├── utils.ts                # cn() helper (clsx + tailwind-merge)
-│   ├── theme/                  # Theme switching utilities
 │   ├── hooks/
 │   │   └── is-mobile.svelte.ts # useMobile() hook
 │   ├── components/
@@ -719,11 +718,14 @@ toast.error('Gagal: ...');
 
 ### Dark Mode
 
-Tanpa `ModeWatcher` dari `mode-watcher` — akan bentrok dengan SvelteKit SSR.
-Pendekatan manual:
+Pakai `mode-watcher` (sesuai official shadcn-svelte):
 
-- Inline script di `src/app.html` set class `dark` dari `localStorage` sebelum hydrate
-- Toggle: `document.documentElement.classList.toggle('dark')` + `localStorage.setItem()`
+- `<ModeWatcher modeStorageKey="qms-theme" />` di root layout `src/routes/+layout.svelte`
+- Key localStorage `qms-theme` dipertahankan dari implementasi lama agar preferensi user tersimpan
+- mode-watcher otomatis menyuntik script anti-FOUC di `<head>` saat SSR (tidak perlu inline script manual di `app.html`)
+- Toggle: `toggleMode()` dari `mode-watcher`; baca mode via store `mode.current` (reaktif)
+- `sonner.svelte` memakai `mode.current` untuk tema toast — sinkron otomatis dengan halaman
+- Board publik (`board/[code]`) memakai toggle yang sama; Mode TV **tidak** memaksa dark — styling-nya mengikuti tema user
 
 ---
 

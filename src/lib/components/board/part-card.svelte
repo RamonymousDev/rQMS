@@ -36,16 +36,14 @@
 			'flex overflow-hidden rounded-xl border bg-card shadow-sm transition-all',
 			hasNg
 				? 'border-red-300 ring-1 ring-red-500/20 dark:border-red-900/60'
-				: 'border-border hover:shadow-md',
-			tvMode && 'border-white/10 bg-white/[0.03]'
+				: 'border-border hover:shadow-md'
 		)
 	);
 
 	const headerClass = $derived(
 		cn(
 			'flex items-center justify-between gap-3 px-5 py-4',
-			hasNg && !tvMode ? 'bg-red-50/60 dark:bg-red-950/20' : '',
-			hasNg && tvMode ? 'bg-red-500/10' : ''
+			hasNg ? 'bg-red-50/60 dark:bg-red-950/20' : ''
 		)
 	);
 
@@ -71,12 +69,7 @@
 				<p class={cn('truncate font-mono font-bold text-primary', tvMode ? 'text-lg' : 'text-sm')}>
 					{part.partNo}
 				</p>
-				<p
-					class={cn(
-						'mt-0.5 truncate text-muted-foreground',
-						tvMode ? 'text-sm text-white/60' : 'text-xs'
-					)}
-				>
+				<p class={cn('mt-0.5 truncate text-xs text-muted-foreground', tvMode && 'text-sm')}>
 					{part.partName}
 				</p>
 			</div>
@@ -90,7 +83,7 @@
 			lebar; 2 kolom berdampingan gampang kebentur. Baris penuh aman di
 			semua ukuran kartu dan lebih enak dibaca.
 		-->
-		<div class={cn('divide-y', tvMode ? 'divide-white/10' : 'divide-border')}>
+		<div class={cn('divide-y divide-border')}>
 			{#each SHIFTS as shift (shift)}
 				{@const shiftStatuses = part.status[shift]}
 				{@const shiftHasNg = latestInShift(part, shift)?.status === 'NG'}
@@ -100,10 +93,9 @@
 					class={cn(
 						'flex items-center justify-between gap-3 transition-colors',
 						tvMode ? 'px-4 py-4' : 'px-4 py-2.5',
-						shiftHasNg && !tvMode ? 'bg-red-50/40 dark:bg-red-950/10' : '',
-						shiftHasNg && tvMode ? 'bg-red-500/10' : '',
+						shiftHasNg ? 'bg-red-50/40 dark:bg-red-950/10' : '',
 						isActive && !tvMode ? 'bg-primary/5' : '',
-						isActive && tvMode ? 'bg-amber-500/5' : ''
+						isActive && tvMode ? 'bg-amber-500/10' : ''
 					)}
 				>
 					<div class="flex shrink-0 flex-col items-start gap-1">
@@ -111,7 +103,7 @@
 							class={cn(
 								'font-semibold tracking-wider uppercase',
 								tvMode ? 'text-xs' : 'text-[10px]',
-								shiftHasNg ? 'text-red-500' : tvMode ? 'text-white/50' : 'text-muted-foreground'
+								shiftHasNg ? 'text-red-500' : 'text-muted-foreground'
 							)}
 						>
 							{SHIFT_LABELS[shift]}
@@ -120,7 +112,9 @@
 							<span
 								class={cn(
 									'rounded-full px-1.5 py-px font-bold tracking-wide whitespace-nowrap uppercase',
-									tvMode ? 'bg-amber-500/15 text-amber-400' : 'bg-primary/10 text-primary',
+									tvMode
+										? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+										: 'bg-primary/10 text-primary',
 									tvMode ? 'text-[10px]' : 'text-[9px]'
 								)}
 							>

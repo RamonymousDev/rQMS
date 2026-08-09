@@ -31,18 +31,13 @@
 	]);
 
 	function tileValueClass(tone: 'ng' | 'ok' | 'pending'): string {
-		if (tone === 'ng') return tvMode ? 'text-red-400' : 'text-red-600 dark:text-red-400';
-		if (tone === 'ok') return tvMode ? 'text-green-400' : 'text-green-600 dark:text-green-400';
-		return tvMode ? 'text-white/70' : 'text-foreground';
+		if (tone === 'ng') return 'text-red-600 dark:text-red-400';
+		if (tone === 'ok') return 'text-green-600 dark:text-green-400';
+		return 'text-foreground';
 	}
 </script>
 
-<div
-	class={cn(
-		'border-b transition-colors',
-		tvMode ? 'border-white/10 bg-white/[0.02]' : 'border-border bg-muted/30'
-	)}
->
+<div class={cn('border-b border-border bg-muted/30 transition-colors')}>
 	<div
 		class={cn(
 			'mx-auto flex max-w-6xl items-center justify-between gap-4 px-6',
@@ -50,9 +45,7 @@
 		)}
 	>
 		{#if parts.length === 0}
-			<span class={cn('text-xs', tvMode ? 'text-white/50' : 'text-muted-foreground')}>
-				Tidak ada part terkonfigurasi
-			</span>
+			<span class="text-xs text-muted-foreground">Tidak ada part terkonfigurasi</span>
 		{:else}
 			<div class="flex items-stretch divide-x divide-border/60">
 				{#each tiles as tile, i (tile.label)}
@@ -70,8 +63,8 @@
 						</span>
 						<span
 							class={cn(
-								'font-semibold tracking-wide uppercase',
-								tvMode ? 'text-xs text-white/50' : 'text-[11px] text-muted-foreground'
+								'font-semibold tracking-wide text-muted-foreground uppercase',
+								tvMode ? 'text-xs' : 'text-[11px]'
 							)}
 						>
 							{tile.label}
@@ -82,12 +75,7 @@
 		{/if}
 
 		{#if isHistorical}
-			<span
-				class={cn(
-					'shrink-0 text-xs font-medium',
-					tvMode ? 'text-amber-400' : 'text-amber-600 dark:text-amber-500'
-				)}
-			>
+			<span class="shrink-0 text-xs font-medium text-amber-600 dark:text-amber-500">
 				· data historis
 			</span>
 		{/if}

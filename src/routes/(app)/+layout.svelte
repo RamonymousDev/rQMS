@@ -14,7 +14,9 @@
 	import { toast } from 'svelte-sonner';
 	import AppSidebar from '$lib/components/app-sidebar.svelte';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
-	import { getInitialTheme, toggleTheme } from '$lib/theme/index.js';
+	import SunIcon from '@lucide/svelte/icons/sun';
+	import MoonIcon from '@lucide/svelte/icons/moon';
+	import { mode, toggleMode } from 'mode-watcher';
 
 	const { children, data } = $props();
 
@@ -60,20 +62,8 @@
 	let confirmPassword = $state('');
 	let changing = $state(false);
 	let loggingOut = $state(false);
-	// eslint-disable-next-line svelte/prefer-writable-derived
-	let isDark = $state(false);
 
-	function updateThemeLabel() {
-		return isDark ? 'Light Mode' : 'Dark Mode';
-	}
-
-	function handleToggleTheme() {
-		isDark = toggleTheme() === 'dark';
-	}
-
-	$effect(() => {
-		isDark = getInitialTheme() === 'dark';
-	});
+	const isDark = $derived(mode.current === 'dark');
 
 	function openChangePassword() {
 		settingsOpen = false;
@@ -182,8 +172,14 @@
 						</div>
 					</DropdownMenu.Trigger>
 					<DropdownMenu.Content align="end" class="w-56">
-						<DropdownMenu.Item onclick={handleToggleTheme}>
-							{updateThemeLabel()}
+						<DropdownMenu.Item onclick={toggleMode}>
+							<SunIcon
+								class="size-4 scale-100 rotate-0 !transition-all dark:scale-0 dark:-rotate-90"
+							/>
+							<MoonIcon
+								class="absolute size-4 scale-0 rotate-90 !transition-all dark:scale-100 dark:rotate-0"
+							/>
+							<span>{isDark ? 'Light Mode' : 'Dark Mode'}</span>
 						</DropdownMenu.Item>
 						<DropdownMenu.Item onclick={openChangePassword}>Ganti Password</DropdownMenu.Item>
 						<DropdownMenu.Separator />
