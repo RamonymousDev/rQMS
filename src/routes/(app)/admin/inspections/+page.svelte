@@ -15,6 +15,7 @@
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
+	import DatePicker from '$lib/components/date-picker.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import {
 		Select,
@@ -348,13 +349,13 @@
 				/>
 			</div>
 			<div class="grid gap-1.5">
-				<Label for="filterDateFrom">Dari Tanggal</Label>
-				<Input id="filterDateFrom" type="date" bind:value={filterDateFrom} />
+				<Label>Dari Tanggal</Label>
+				<DatePicker bind:value={filterDateFrom} clearable placeholder="Dari tanggal" />
 				<p class="text-[10px] text-muted-foreground">Tanggal operasional (07:30–07:30 WIB)</p>
 			</div>
 			<div class="grid gap-1.5">
-				<Label for="filterDateTo">Sampai Tanggal</Label>
-				<Input id="filterDateTo" type="date" bind:value={filterDateTo} />
+				<Label>Sampai Tanggal</Label>
+				<DatePicker bind:value={filterDateTo} clearable placeholder="Sampai tanggal" />
 				<p class="text-[10px] text-muted-foreground">Tanggal operasional (07:30–07:30 WIB)</p>
 			</div>
 		</div>
