@@ -173,7 +173,7 @@
 </script>
 
 <svelte:head>
-	<title>Ringkasan Part — {data.line.name}</title>
+	<title>Ringkasan Part · {data.line.name} · QMS</title>
 </svelte:head>
 
 <div

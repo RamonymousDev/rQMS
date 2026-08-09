@@ -50,6 +50,7 @@
 	}
 
 	const breadcrumbs = $derived(getBreadcrumbs());
+	const pageTitle = $derived(getBreadcrumbs().at(-1)?.label ?? 'QMS');
 
 	let settingsOpen = $state(false);
 	let changePasswordOpen = $state(false);
@@ -137,6 +138,8 @@
 		}
 	}
 </script>
+
+<svelte:head><title>{pageTitle} · QMS</title></svelte:head>
 
 <svelte:window on:keydown={handleKeydown} />
 
