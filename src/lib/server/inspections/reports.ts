@@ -3,7 +3,7 @@ import { error } from '@sveltejs/kit';
 import { db } from '../db/index.js';
 import { inspections } from '../db/schema.js';
 import { parseId } from '../master/admin.js';
-import { parseJakartaDate } from '../shift.js';
+import { getOperationalDayRange } from '../shift.js';
 import { STAGES } from './types.js';
 
 const PAGE_SIZE_DEFAULT = 25;
@@ -16,8 +16,10 @@ function parsePositiveInt(value: string | null, fallback: number, max: number): 
 }
 
 /**
- * Filter monitoring. Tanggal diperlakukan sebagai tanggal kalender Jakarta,
- * lalu dikonversi ke rentang instant UTC agar cocok dengan timestamptz.
+ * Filter monitoring. Tanggal diperlakukan sebagai tanggal *operasional*
+ * (07:30 WIB → 07:30 WIB keesokan harinya), lalu dikonversi ke rentang instant
+ * UTC agar cocok dengan timestamptz. Konsisten dengan board dan rule re-check:
+ * inspeksi night shift jam 01:00 tgl 10 masuk ke tanggal 9.
  */
 function buildFilters(params: URLSearchParams): SQL[] {
 	const filters: SQL[] = [];
@@ -53,17 +55,17 @@ function buildFilters(params: URLSearchParams): SQL[] {
 
 	const dateFrom = params.get('dateFrom')?.trim();
 	if (dateFrom) {
-		const from = parseJakartaDate(dateFrom);
-		if (!from) throw error(400, 'Format dateFrom harus YYYY-MM-DD.');
-		filters.push(gte(inspections.inspectedAt, from));
+		const range = getOperationalDayRange(dateFrom);
+		if (!range) throw error(400, 'Format dateFrom harus YYYY-MM-DD.');
+		filters.push(gte(inspections.inspectedAt, range.start));
 	}
 
 	const dateTo = params.get('dateTo')?.trim();
 	if (dateTo) {
-		const to = parseJakartaDate(dateTo);
-		if (!to) throw error(400, 'Format dateTo harus YYYY-MM-DD.');
-		// Inklusif: ambil sampai akhir hari tersebut.
-		filters.push(lt(inspections.inspectedAt, new Date(to.getTime() + 24 * 60 * 60 * 1000)));
+		const range = getOperationalDayRange(dateTo);
+		if (!range) throw error(400, 'Format dateTo harus YYYY-MM-DD.');
+		// Inklusif: ambil sampai akhir hari operasional tersebut (07:30 WIB besoknya).
+		filters.push(lt(inspections.inspectedAt, range.end));
 	}
 
 	return filters;

@@ -11,7 +11,7 @@ import {
 import type { SessionUser } from '../auth.js';
 import { findActiveConfig, type ActiveConfig } from '../configs/index.js';
 import { getUserPermissionIds } from '../permissions.js';
-import { getJakartaDayRange, getShift } from '../shift.js';
+import { getCurrentOperationalDayRange, getShift } from '../shift.js';
 import { parseBody } from '../master/admin.js';
 import { prepareSchema, statusFor, submitSchema, type Stage, type SubmitInput } from './types.js';
 
@@ -55,11 +55,16 @@ async function requireConfig(partNo: string, lineId: string): Promise<ActiveConf
 }
 
 /**
- * Inspeksi terakhir untuk kombinasi config+stage+shift pada hari kalender
- * Jakarta yang sedang berjalan. Dipakai untuk rule re-check.
+ * Inspeksi terakhir untuk kombinasi config+stage+shift pada hari *operasional*
+ * yang sedang berjalan. Dipakai untuk rule re-check.
+ *
+ * Sengaja hari operasional, bukan hari kalender: night shift berjalan dari
+ * 20:00 sampai 07:29 keesokan harinya. Kalau pakai hari kalender, inspeksi
+ * jam 21:00 dan jam 01:00 dalam shift yang sama dianggap beda hari sehingga
+ * konfirmasi re-check tidak muncul.
  */
 async function findLastInspectionToday(configId: string, stage: Stage, shift: 'DAY' | 'NIGHT') {
-	const { start, end } = getJakartaDayRange();
+	const { start, end } = getCurrentOperationalDayRange();
 	return db.query.inspections.findFirst({
 		where: and(
 			eq(inspections.partLineConfigId, configId),

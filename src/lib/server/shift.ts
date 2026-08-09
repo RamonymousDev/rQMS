@@ -48,6 +48,59 @@ export function getJakartaDateKey(at: Date = new Date()): string {
 	return toJakarta(at).toISOString().slice(0, 10);
 }
 
+/**
+ * Tanggal *operasional* dalam format YYYY-MM-DD.
+ *
+ * Night shift "milik" tanggal di mana shift tersebut DIMULAI (20:00 WIB),
+ * bukan tanggal kalender saat jam itu terjadi. Contoh:
+ *   - Tgl 9 jam 20:00–23:59 → night shift tgl 9
+ *   - Tgl 10 jam 00:00–07:29 → night shift tgl 9  ← masih tgl 9 operasional
+ *   - Tgl 10 jam 07:30–19:59 → day shift tgl 10
+ *
+ * Rumusnya: jika jam WIB < 07:30 (masih "ekor" night shift kemarin),
+ * mundurkan tanggal operasional satu hari.
+ */
+export function getOperationalDate(at: Date = new Date()): string {
+	const jakarta = toJakarta(at);
+	const minutes = jakarta.getUTCHours() * 60 + jakarta.getUTCMinutes();
+	// Sebelum 07:30 WIB → masih night shift hari sebelumnya
+	const adjusted = minutes < DAY_SHIFT_START ? new Date(jakarta.getTime() - DAY_MS) : jakarta;
+	return adjusted.toISOString().slice(0, 10);
+}
+
+/** Hitung rentang operasional tanpa validasi — `dateKey` diasumsikan sudah valid. */
+function operationalRangeFor(dateKey: string): { start: Date; end: Date } {
+	// Awal hari kalender Jakarta dalam UTC, lalu geser ke 07:30 WIB.
+	const calendarStartMs = Date.parse(`${dateKey}T00:00:00.000Z`) - JAKARTA_OFFSET_MS;
+	const start = new Date(calendarStartMs + DAY_SHIFT_START * 60 * 1000);
+	return { start, end: new Date(start.getTime() + DAY_MS) };
+}
+
+/**
+ * Rentang waktu UTC yang mencakup seluruh hari operasional `dateKey` (YYYY-MM-DD).
+ *
+ * Satu hari operasional = Day shift + Night shift pada tanggal tersebut:
+ *   - Day  : 07:30 WIB tgl N  → 19:59 WIB tgl N
+ *   - Night: 20:00 WIB tgl N  → 07:29 WIB tgl N+1
+ *
+ * Jadi rentangnya: [07:30 WIB tgl N, 07:30 WIB tgl N+1)
+ * Return null kalau format `dateKey` tidak valid — pemanggil wajib menanganinya.
+ */
+export function getOperationalDayRange(dateKey: string): { start: Date; end: Date } | null {
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return null;
+	if (Number.isNaN(Date.parse(`${dateKey}T00:00:00.000Z`))) return null;
+	return operationalRangeFor(dateKey);
+}
+
+/**
+ * Rentang hari operasional yang sedang berjalan pada instant `at`.
+ * Ini yang dipakai untuk scope "hari ini" pada rule re-check — bukan hari
+ * kalender, agar night shift yang melewati tengah malam tetap satu kesatuan.
+ */
+export function getCurrentOperationalDayRange(at: Date = new Date()): { start: Date; end: Date } {
+	return operationalRangeFor(getOperationalDate(at));
+}
+
 /** Parse "YYYY-MM-DD" (dianggap tanggal Jakarta) menjadi instant awal hari UTC. */
 export function parseJakartaDate(value: string): Date | null {
 	if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;

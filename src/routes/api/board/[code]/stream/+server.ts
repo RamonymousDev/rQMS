@@ -27,13 +27,19 @@ import postgres from 'postgres';
  *   AFTER INSERT OR UPDATE ON inspections
  *   FOR EACH ROW EXECUTE FUNCTION notify_board_update();
  *
+ * Query `?date=YYYY-MM-DD` membatasi data ke satu hari operasional. Kalau tidak
+ * diberikan, `date` dibiarkan null sehingga setiap refresh menghitung ulang hari
+ * operasional berjalan — board yang dibiarkan terbuka melewati batas 07:30 WIB
+ * ikut berpindah hari dengan sendirinya.
+ *
  * Route ini PUBLIC — tidak butuh auth.
  */
-export const GET: RequestHandler = async ({ params, request }) => {
+export const GET: RequestHandler = async ({ params, request, url }) => {
 	const { code } = params;
+	const date = url.searchParams.get('date');
 
 	// Validasi line exists dulu sebelum buka koneksi
-	const initial = await getBoardData(code);
+	const initial = await getBoardData(code, date);
 	if (!initial) {
 		return new Response('Line not found', { status: 404 });
 	}
@@ -61,7 +67,7 @@ export const GET: RequestHandler = async ({ params, request }) => {
 				// LISTEN menggunakan subscribe API postgres.js
 				await sql.listen(channel, async () => {
 					try {
-						const fresh = await getBoardData(code);
+						const fresh = await getBoardData(code, date);
 						if (fresh) send('update', fresh);
 					} catch {
 						// Jangan crash SSE karena query error sementara

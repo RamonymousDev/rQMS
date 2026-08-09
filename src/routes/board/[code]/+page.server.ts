@@ -7,8 +7,9 @@ import { getBoardData } from '$lib/server/board/index.js';
  * hooks.server.ts hanya set locals.user, tidak redirect kalau user null,
  * sehingga halaman ini aman diakses tanpa login.
  */
-export const load: PageServerLoad = async ({ params }) => {
-	const data = await getBoardData(params.code);
+export const load: PageServerLoad = async ({ params, url }) => {
+	// `?date=YYYY-MM-DD` memilih hari operasional; kosong/invalid → hari berjalan.
+	const data = await getBoardData(params.code, url.searchParams.get('date'));
 
 	if (!data) {
 		error(404, `Line "${params.code}" tidak ditemukan.`);
@@ -16,6 +17,8 @@ export const load: PageServerLoad = async ({ params }) => {
 
 	return {
 		line: data.line,
-		parts: data.parts
+		parts: data.parts,
+		date: data.date,
+		today: data.today
 	};
 };

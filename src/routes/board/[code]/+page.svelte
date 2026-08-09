@@ -1,5 +1,7 @@
 <script lang="ts">
-	import { onDestroy, onMount, untrack } from 'svelte';
+	import { untrack } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import type { PageData } from './$types.js';
 	import type {
 		BoardPart,
@@ -13,6 +15,8 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
 	import { cn } from '$lib/utils.js';
 
 	const { data }: { data: PageData } = $props();
@@ -20,6 +24,16 @@
 	// ── Reactive state ───────────────────────────────────────────────────
 	let parts = $state<BoardPart[]>(untrack(() => data.parts));
 	let sseConnected = $state(false);
+
+	/**
+	 * Tanggal operasional yang sedang ditampilkan. Bisa berubah dari dua arah:
+	 * navigasi (`data.date`) dan payload SSE — board yang dibiarkan terbuka
+	 * melewati 07:30 WIB akan berpindah hari dengan sendirinya.
+	 */
+	let viewDate = $state(untrack(() => data.date));
+	let todayDate = $state(untrack(() => data.today));
+
+	const isToday = $derived(viewDate === todayDate);
 
 	// Modal state
 	let modalOpen = $state(false);
@@ -31,43 +45,94 @@
 	let expandedId = $state<string | null>(null);
 
 	// ── SSE ──────────────────────────────────────────────────────────────
-	let eventSource: EventSource | null = null;
+	type BoardPayload = { parts: BoardPart[]; date: string; today: string };
 
-	onMount(() => {
-		const es = new EventSource(`/api/board/${data.line.code}/stream`);
-		eventSource = es;
+	/**
+	 * Koneksi SSE dibuka ulang setiap kali line atau tanggal berubah, karena
+	 * server memfilter stream berdasarkan tanggal. Saat melihat hari berjalan,
+	 * `date` sengaja tidak dikirim agar server menghitung ulang hari operasional
+	 * pada tiap event — board yang menyala 24 jam ikut berganti hari sendiri.
+	 */
+	$effect(() => {
+		const code = data.line.code;
+		const requested = data.date === data.today ? null : data.date;
+
+		// Sinkronkan tampilan dengan hasil SSR sebelum SSE mengambil alih.
+		parts = data.parts;
+		viewDate = data.date;
+		todayDate = data.today;
+		sseConnected = false;
+
+		const query = requested ? `?date=${encodeURIComponent(requested)}` : '';
+		const es = new EventSource(`/api/board/${code}/stream${query}`);
+
+		const applyPayload = (e: MessageEvent) => {
+			const payload = JSON.parse(e.data) as BoardPayload;
+			parts = payload.parts;
+			viewDate = payload.date;
+			todayDate = payload.today;
+		};
 
 		es.addEventListener('init', (e) => {
-			const payload = JSON.parse(e.data) as { parts: BoardPart[] };
-			parts = payload.parts;
+			applyPayload(e);
 			sseConnected = true;
 		});
-
-		es.addEventListener('update', (e) => {
-			const payload = JSON.parse(e.data) as { parts: BoardPart[] };
-			parts = payload.parts;
-		});
-
+		es.addEventListener('update', applyPayload);
 		es.addEventListener('error', () => {
 			sseConnected = false;
 		});
-
 		es.onopen = () => {
 			sseConnected = true;
 		};
+
+		return () => es.close();
 	});
 
-	onDestroy(() => {
-		eventSource?.close();
-		eventSource = null;
-	});
+	// ── Filter tanggal ───────────────────────────────────────────────────
+	const DAY_MS = 24 * 60 * 60 * 1000;
+
+	function goToDate(next: string) {
+		if (!next || next === viewDate) return;
+		const code = data.line.code;
+		// Hari berjalan tidak perlu query — URL board tetap bersih untuk layar produksi.
+		goto(
+			next === todayDate
+				? resolve('/board/[code]', { code })
+				: resolve(`/board/[code]?date=${next}`, { code }),
+			{ keepFocus: true, noScroll: true }
+		);
+	}
+
+	/** Geser tanggal operasional `delta` hari, tidak pernah melewati hari berjalan. */
+	function shiftDate(delta: number) {
+		// dateKey diperlakukan sebagai UTC midnight, jadi aritmetika ms aman dari DST.
+		const next = new Date(Date.parse(`${viewDate}T00:00:00.000Z`) + delta * DAY_MS)
+			.toISOString()
+			.slice(0, 10);
+		if (next > todayDate) return;
+		goToDate(next);
+	}
+
+	/**
+	 * Label ramah untuk tanggal operasional yang sedang ditampilkan.
+	 * Dirender sebagai UTC karena `viewDate` sudah berupa tanggal Jakarta.
+	 */
+	const dateLabel = $derived(
+		new Date(Date.parse(`${viewDate}T00:00:00.000Z`)).toLocaleDateString('id-ID', {
+			weekday: 'long',
+			day: 'numeric',
+			month: 'long',
+			year: 'numeric',
+			timeZone: 'UTC'
+		})
+	);
 
 	// ── Badge click → buka Modal ─────────────────────────────────────────
 	const STAGE_LABELS: Record<StageKey, string> = { START: 'Start', MIDDLE: 'Middle', END: 'End' };
 
 	async function handleBadgeClick(part: BoardPart, shift: ShiftKey, stage: StageKey) {
 		modalTitle = `${part.partNo} — ${STAGE_LABELS[stage]}`;
-		modalSubtitle = `${shift === 'DAY' ? 'Day Shift' : 'Night Shift'} · ${data.line.code}`;
+		modalSubtitle = `${shift === 'DAY' ? 'Day Shift' : 'Night Shift'} · ${data.line.code} · ${dateLabel}`;
 		modalHistory = [];
 		expandedId = null;
 		modalLoading = true;
@@ -75,7 +140,7 @@
 
 		try {
 			const res = await fetch(
-				`/api/board/${data.line.code}/history?configId=${part.configId}&shift=${shift}&stage=${stage}`
+				`/api/board/${data.line.code}/history?configId=${part.configId}&shift=${shift}&stage=${stage}&date=${viewDate}`
 			);
 			if (res.ok) {
 				modalHistory = await res.json();
@@ -139,21 +204,73 @@
 				</p>
 			</div>
 
-			<!-- Legend -->
-			<div class="flex shrink-0 items-center gap-4 text-xs text-muted-foreground">
-				<div class="flex items-center gap-1.5">
-					<span class="h-4 w-4 rounded-full bg-green-500"></span>
-					<span>OK</span>
+			<div class="flex shrink-0 flex-col items-end gap-3">
+				<!-- Legend -->
+				<div class="flex items-center gap-4 text-xs text-muted-foreground">
+					<div class="flex items-center gap-1.5">
+						<span class="h-4 w-4 rounded-full bg-green-500"></span>
+						<span>OK</span>
+					</div>
+					<div class="flex items-center gap-1.5">
+						<span class="h-4 w-4 rounded-full bg-red-500"></span>
+						<span>NG</span>
+					</div>
+					<div class="flex items-center gap-1.5">
+						<span class="h-4 w-4 rounded-full bg-muted-foreground/30"></span>
+						<span>—</span>
+					</div>
 				</div>
+
+				<!-- Filter tanggal operasional -->
 				<div class="flex items-center gap-1.5">
-					<span class="h-4 w-4 rounded-full bg-red-500"></span>
-					<span>NG</span>
-				</div>
-				<div class="flex items-center gap-1.5">
-					<span class="h-4 w-4 rounded-full bg-muted-foreground/30"></span>
-					<span>—</span>
+					<Button
+						variant="outline"
+						size="sm"
+						class="h-8 w-8 p-0"
+						aria-label="Hari sebelumnya"
+						onclick={() => shiftDate(-1)}
+					>
+						‹
+					</Button>
+					<Input
+						type="date"
+						max={todayDate}
+						value={viewDate}
+						aria-label="Tanggal operasional"
+						class="h-8 w-[9.5rem] text-xs"
+						onchange={(e) => goToDate(e.currentTarget.value)}
+					/>
+					<Button
+						variant="outline"
+						size="sm"
+						class="h-8 w-8 p-0"
+						aria-label="Hari berikutnya"
+						disabled={isToday}
+						onclick={() => shiftDate(1)}
+					>
+						›
+					</Button>
+					<Button
+						variant={isToday ? 'secondary' : 'outline'}
+						size="sm"
+						class="h-8 text-xs"
+						disabled={isToday}
+						onclick={() => goToDate(todayDate)}
+					>
+						Hari ini
+					</Button>
 				</div>
 			</div>
+		</div>
+
+		<!-- Konteks tanggal: shift malam melewati tengah malam, jadi perlu eksplisit -->
+		<div class="mx-auto mt-3 max-w-5xl">
+			<p class="text-xs text-muted-foreground">
+				Menampilkan <span class="font-medium text-foreground">{dateLabel}</span>
+				· 07:30 hari itu s/d 07:30 hari berikutnya (WIB){#if !isToday}
+					<span class="ms-1 text-amber-600 dark:text-amber-500">· data historis</span>
+				{/if}
+			</p>
 		</div>
 	</div>
 
@@ -164,6 +281,8 @@
 				<p class="text-lg font-medium">Belum ada part terkonfigurasi</p>
 				<p class="text-sm">Tambahkan konfigurasi part untuk line ini terlebih dahulu.</p>
 			</div>
+			<!-- Catatan: daftar part berasal dari config aktif, bukan dari inspeksi,
+			     sehingga tabel tetap tampil (dengan badge kosong) pada tanggal tanpa data. -->
 		{:else}
 			<div class="rounded-lg border bg-card shadow-sm">
 				<Table.Root>
@@ -230,7 +349,7 @@
 					</div>
 				{:else if modalHistory.length === 0}
 					<div class="py-12 text-center text-sm text-muted-foreground">
-						Belum ada riwayat inspeksi.
+						Belum ada riwayat inspeksi pada tanggal ini.
 					</div>
 				{:else}
 					<p class="mb-3 text-xs text-muted-foreground">

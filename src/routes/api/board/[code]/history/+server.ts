@@ -7,13 +7,16 @@ const VALID_SHIFTS: ShiftKey[] = ['DAY', 'NIGHT'];
 const VALID_STAGES: StageKey[] = ['START', 'MIDDLE', 'END'];
 
 /**
- * GET /api/board/[code]/history?configId=…&shift=DAY&stage=START
+ * GET /api/board/[code]/history?configId=…&shift=DAY&stage=START&date=YYYY-MM-DD
+ *
+ * `date` adalah tanggal *operasional* (opsional; default hari berjalan).
  * Route PUBLIC — tanpa auth.
  */
 export const GET: RequestHandler = async ({ url }) => {
 	const configId = url.searchParams.get('configId')?.trim();
 	const shift = url.searchParams.get('shift')?.trim() as ShiftKey | undefined;
 	const stage = url.searchParams.get('stage')?.trim() as StageKey | undefined;
+	const date = url.searchParams.get('date');
 
 	if (!configId || !shift || !stage) {
 		error(400, 'Parameter configId, shift, dan stage wajib diisi.');
@@ -22,6 +25,6 @@ export const GET: RequestHandler = async ({ url }) => {
 	if (!VALID_SHIFTS.includes(shift)) error(400, 'Shift tidak valid.');
 	if (!VALID_STAGES.includes(stage)) error(400, 'Stage tidak valid.');
 
-	const rows = await getInspectionHistory(configId, shift, stage);
+	const rows = await getInspectionHistory(configId, shift, stage, date);
 	return json(rows);
 };

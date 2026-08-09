@@ -1,7 +1,8 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, gte, lt } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { inspections, lines, partLineConfigs, parts } from '../db/schema.js';
 import type { Stage } from '../inspections/types.js';
+import { getOperationalDate, getOperationalDayRange } from '../shift.js';
 
 export type ShiftKey = 'DAY' | 'NIGHT';
 export type StageKey = Stage;
@@ -32,6 +33,15 @@ export interface BoardLine {
 	name: string;
 }
 
+export interface BoardData {
+	line: BoardLine;
+	parts: BoardPart[];
+	/** Tanggal operasional yang sedang ditampilkan (YYYY-MM-DD). */
+	date: string;
+	/** Tanggal operasional yang sedang berjalan sekarang — batas atas date picker. */
+	today: string;
+}
+
 const STAGES: StageKey[] = ['START', 'MIDDLE', 'END'];
 const SHIFTS: ShiftKey[] = ['DAY', 'NIGHT'];
 
@@ -44,18 +54,47 @@ function emptyShiftStatus(): PartShiftStatus {
 }
 
 /**
- * Ambil data board untuk sebuah line berdasarkan code.
+ * Normalisasi tanggal operasional yang diminta.
+ *
+ * Board adalah layar publik di line produksi — `dateKey` yang tidak valid
+ * di-fallback ke hari operasional berjalan, bukan dilempar sebagai error,
+ * agar layar tidak pernah menampilkan halaman error.
+ */
+function resolveBoardDate(dateKey?: string | null): {
+	date: string;
+	today: string;
+	range: { start: Date; end: Date };
+} {
+	const today = getOperationalDate();
+	const requested = dateKey?.trim();
+	const range = requested ? getOperationalDayRange(requested) : null;
+	if (!requested || !range) {
+		return { date: today, today, range: getOperationalDayRange(today)! };
+	}
+	return { date: requested, today, range };
+}
+
+/**
+ * Ambil data board untuk sebuah line berdasarkan code, dibatasi ke satu hari
+ * operasional (default: hari operasional berjalan).
+ *
+ * Hari operasional = 07:30 WIB tgl N s/d 07:30 WIB tgl N+1, sehingga night
+ * shift yang melewati tengah malam tetap masuk ke tanggal shift itu dimulai.
+ *
  * Return null kalau line tidak ditemukan.
  */
 export async function getBoardData(
-	lineCode: string
-): Promise<{ line: BoardLine; parts: BoardPart[] } | null> {
+	lineCode: string,
+	dateKey?: string | null
+): Promise<BoardData | null> {
 	// 1. Resolve line
 	const line = await db.query.lines.findFirst({
 		where: (l, { eq }) => eq(l.code, lineCode),
 		columns: { id: true, code: true, name: true }
 	});
 	if (!line) return null;
+
+	const { date, today, range } = resolveBoardDate(dateKey);
 
 	// 2. Ambil semua part yang terkonfigurasi di line ini (aktif)
 	const configs = await db.query.partLineConfigs.findMany({
@@ -66,7 +105,7 @@ export async function getBoardData(
 		columns: { id: true }
 	});
 
-	if (configs.length === 0) return { line, parts: [] };
+	if (configs.length === 0) return { line, parts: [], date, today };
 
 	// 3. Untuk tiap kombinasi (configId, shift, stage), ambil inspeksi terbaru.
 	//    Satu query per kombinasi terlalu banyak round-trips; kita ambil semua
@@ -85,15 +124,11 @@ export async function getBoardData(
 		.from(inspections)
 		.where(
 			and(
-				// filter hanya config yang ada di line ini
-				// drizzle inArray tidak bisa langsung pakai array string — pakai eq loop via OR
-				// tapi lebih efisien: join ke partLineConfigs
-				eq(
-					inspections.partLineConfigId,
-					// subquery workaround: filter di where dengan lineCode snapshot
-					inspections.partLineConfigId
-				),
-				eq(inspections.lineCode, lineCode)
+				// lineCode adalah kolom snapshot di inspections — cukup untuk memfilter
+				// ke line ini tanpa join ke partLineConfigs.
+				eq(inspections.lineCode, lineCode),
+				gte(inspections.inspectedAt, range.start),
+				lt(inspections.inspectedAt, range.end)
 			)
 		)
 		.orderBy(desc(inspections.inspectedAt));
@@ -136,22 +171,33 @@ export async function getBoardData(
 	// Sort by partNo ascending
 	boardParts.sort((a, b) => a.partNo.localeCompare(b.partNo));
 
-	return { line, parts: boardParts };
+	return { line, parts: boardParts, date, today };
 }
 
 /**
  * Ambil riwayat inspeksi lengkap (termasuk points, hardwares, lengths)
- * untuk kombinasi (configId, shift, stage). Dipakai oleh Sheet history di board.
+ * untuk kombinasi (configId, shift, stage) pada satu hari operasional.
+ *
+ * Dibatasi ke hari operasional yang sama dengan badge yang diklik agar isi
+ * modal selalu konsisten dengan status yang ditampilkan badge tersebut.
  */
 export async function getInspectionHistory(
 	configId: string,
 	shift: ShiftKey,
 	stage: StageKey,
+	dateKey?: string | null,
 	limit = 20
 ) {
+	const { range } = resolveBoardDate(dateKey);
 	return db.query.inspections.findMany({
-		where: (i, { and, eq }) =>
-			and(eq(i.partLineConfigId, configId), eq(i.shift, shift), eq(i.stage, stage)),
+		where: (i, { and, eq, gte, lt }) =>
+			and(
+				eq(i.partLineConfigId, configId),
+				eq(i.shift, shift),
+				eq(i.stage, stage),
+				gte(i.inspectedAt, range.start),
+				lt(i.inspectedAt, range.end)
+			),
 		orderBy: (i, { desc }) => [desc(i.inspectedAt)],
 		limit,
 		columns: {
