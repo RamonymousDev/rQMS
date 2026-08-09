@@ -23,6 +23,7 @@
 		SelectTrigger
 	} from '$lib/components/ui/select/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
+	import DownloadIcon from '@lucide/svelte/icons/download';
 
 	type InspectionRow = {
 		id: string;
@@ -88,6 +89,8 @@
 	let detailSeq = 0;
 	/** true sampai pencarian pertama selesai dipicu — supaya mount langsung load tanpa debounce. */
 	let firstSearch = true;
+	/** cegah klik ganda saat export sedang dipicu. */
+	let exporting = $state(false);
 
 	function buildQuery(targetPage: number): string {
 		const entries: [string, string][] = [
@@ -204,6 +207,31 @@
 		filterStatus = filterStatus === 'NG' ? '' : 'NG';
 	}
 
+	/** Query export = filter aktif tanpa page/pageSize. */
+	function buildExportQuery(): string {
+		const entries: [string, string][] = [
+			['partNo', filterPartNo.trim()],
+			['lineCode', filterLineCode.trim()],
+			['stage', filterStage],
+			['shift', filterShift],
+			['status', filterStatus],
+			['dateFrom', filterDateFrom],
+			['dateTo', filterDateTo]
+		];
+		return entries
+			.filter(([, value]) => value !== '')
+			.map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+			.join('&');
+	}
+
+	function exportExcel() {
+		if (exporting) return;
+		exporting = true;
+		const qs = buildExportQuery();
+		window.location.assign(`/api/inspections/export${qs ? `?${qs}` : ''}`);
+		setTimeout(() => (exporting = false), 5000);
+	}
+
 	async function openDetail(row: InspectionRow) {
 		const seq = ++detailSeq;
 		detail = null;
@@ -261,6 +289,10 @@
 				</CardDescription>
 			</div>
 			<div class="flex items-center gap-2">
+				<Button variant="outline" size="sm" onclick={exportExcel} disabled={exporting}>
+					<DownloadIcon class="size-4" />
+					Export Excel
+				</Button>
 				<Button variant={showNgOnly ? 'destructive' : 'outline'} size="sm" onclick={toggleNgOnly}>
 					{showNgOnly ? 'Semua' : 'Hanya NG'}
 				</Button>

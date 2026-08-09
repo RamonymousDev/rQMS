@@ -21,7 +21,7 @@ function parsePositiveInt(value: string | null, fallback: number, max: number): 
  * UTC agar cocok dengan timestamptz. Konsisten dengan board dan rule re-check:
  * inspeksi night shift jam 01:00 tgl 10 masuk ke tanggal 9.
  */
-function buildFilters(params: URLSearchParams): SQL[] {
+export function buildFilters(params: URLSearchParams): SQL[] {
 	const filters: SQL[] = [];
 
 	const partNo = params.get('partNo')?.trim();
