@@ -171,7 +171,7 @@ function evaluate(config: ActiveConfig, data: SubmitInput) {
 			throw error(422, 'Spot actual wajib diisi.');
 		}
 		spotActual = data.spotActual;
-		items.push({ status: statusFor(spotActual, config.spotStandard ?? 0), remarks: null });
+		items.push({ status: statusFor(spotActual, config.spotStandard ?? 0, 'exact'), remarks: null });
 	}
 
 	// --- Hardwares: status dihitung, remarks wajib saat NG.
@@ -179,7 +179,7 @@ function evaluate(config: ActiveConfig, data: SubmitInput) {
 		? config.hardwares.map((configured) => {
 				const input = data.hardwares.find((h) => h.hardwareId === configured.hardwareId);
 				if (!input) throw error(422, `Hardware "${configured.hardware.hwNo}" wajib diisi.`);
-				const status = statusFor(input.actualValue, configured.standardValue);
+				const status = statusFor(input.actualValue, configured.standardValue, 'min');
 				const remarks = requireRemarks(
 					status,
 					input.remarks,
@@ -203,7 +203,7 @@ function evaluate(config: ActiveConfig, data: SubmitInput) {
 		? config.lengths.map((configured) => {
 				const input = data.lengths.find((l) => l.lengthNo === configured.lengthNo);
 				if (!input) throw error(422, `Length "${configured.lengthNo}" wajib diisi.`);
-				const status = statusFor(input.actualMm, configured.standardMm);
+				const status = statusFor(input.actualMm, configured.standardMm, 'exact');
 				const remarks = requireRemarks(status, input.remarks, `Length "${configured.lengthNo}"`);
 				items.push({ status, remarks });
 				return {

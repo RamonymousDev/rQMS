@@ -238,7 +238,7 @@ Untuk setiap point:
 
 - Tampilkan Standard: `spot_standard`
 - Input: `spot_actual` (integer)
-- Sistem otomatis tentukan status: `actual >= standard` → OK, else NG
+- Sistem otomatis tentukan status: `actual === standard` → OK, else NG (wajib exact)
 
 #### C. Hardwares (jika `has_hardware = true`)
 
@@ -255,7 +255,7 @@ Untuk setiap length:
 
 - Tampilkan `length_no` + `standard_mm`
 - Input: `actual_mm`
-- Status: `actual >= standard` → OK, else NG
+- Status: `actual === standard` → OK, else NG (wajib exact)
 - Jika NG → **wajib** Remarks
 
 #### E. Visual (jika `has_visual = true`)

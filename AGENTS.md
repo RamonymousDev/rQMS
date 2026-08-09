@@ -168,7 +168,8 @@ src/
 │   │       ├── hardwares/      # CRUD Hardware
 │   │       ├── users/          # CRUD User
 │   │       ├── configs/        # CRUD Part+Line Config
-│   │       └── inspections/    # Monitoring hasil inspeksi (tabel + filter)
+│   │       ├── inspections/    # Monitoring hasil inspeksi (tabel + filter)
+│   │       └── audit/          # Viewer audit log (read-only)
 │   └── api/
 │       ├── auth/
 │       │   ├── logout/         # POST — revokeSession + clearCookie
@@ -184,6 +185,8 @@ src/
 │       │   └── submit/         # POST — evaluate + snapshot + simpan (rate limit + audit)
 │       ├── inspections/        # GET list dengan filter + pagination
 │       ├── inspections/[id]/   # GET detail lengkap
+│       ├── audit/              # GET list audit log (admin, filter + pagination)
+│       ├── dashboard/          # GET stats + inspeksi terbaru (untuk auto-refresh halaman dashboard)
 │       └── board/[code]/
 │           ├── stream/         # GET SSE — LISTEN postgres, push update realtime (PUBLIC)
 │           └── history/        # GET — riwayat inspeksi per configId+shift+stage
@@ -412,9 +415,9 @@ Alur `submit`:
 Aturan bisnis di `evaluate()`:
 
 - **Points**: status OK/NG manual dari operator
-- **Spot**: `actual >= standard` → OK (dihitung backend)
+- **Spot**: `actual === standard` → OK (dihitung backend, wajib exact)
 - **Hardwares**: `actual >= standard` → OK (dihitung backend)
-- **Lengths**: `actual >= standard` → OK (dihitung backend)
+- **Lengths**: `actual === standard` → OK (dihitung backend, wajib exact)
 - **Visual**: OK/NG manual dari operator
 - Satu item NG → `overallStatus = 'NG'`
 - Remarks wajib diisi jika status NG
@@ -429,6 +432,22 @@ GET /api/inspections/:id          → detail lengkap dengan semua child
 Filter yang didukung: `partNo`, `lineCode`, `stage`, `shift`, `status`, `operatorId`, `dateFrom`, `dateTo` (format YYYY-MM-DD, dianggap tanggal Jakarta)
 
 Pagination: `page` (default 1), `pageSize` (default 25, max 100)
+
+### Audit Log (Admin)
+
+```
+GET /api/audit        → list audit log dengan filter + pagination
+```
+
+Filter: `action`, `entity`, `actorNik`, `dateFrom`, `dateTo` (hari kalender Jakarta — audit tidak terkait shift). Ordered `createdAt` DESC. Page/pageSize sama seperti laporan inspeksi. Halaman UI: `/admin/audit`.
+
+### Dashboard
+
+```
+GET /api/dashboard    → stats + inspeksi terbaru (login guard)
+```
+
+Dipakai halaman dashboard untuk auto-refresh (polling 30 detik) — SSR load tetap jadi data awal.
 
 ### Board (Publik)
 

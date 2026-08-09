@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { beforeNavigate, goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
+	import { base, resolve } from '$app/paths';
+	import type { ResolvedPathname } from '$app/types';
 	import { onMount, onDestroy } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { getShift } from '$lib/shift.js';
@@ -79,6 +80,8 @@
 	let visualRemarks = $state('');
 
 	let isDirty = $state(false);
+	let navDialogOpen = $state(false);
+	let pendingNavigation = $state<ResolvedPathname>('' as unknown as ResolvedPathname);
 	let currentStep = $derived.by(() => {
 		if (!selectedLine) return 1;
 		if (!spec) return 2;
@@ -245,24 +248,34 @@
 		return () => window.removeEventListener('keydown', handleKeydown);
 	});
 
-	beforeNavigate(() => {
+	beforeNavigate(({ cancel, to }) => {
 		if (!isDirty) return;
-		clearDraft();
+		cancel();
+		if (!to) return;
+		pendingNavigation = (to.url.pathname.replace(base, '') + to.url.search) as ResolvedPathname;
+		navDialogOpen = true;
 	});
+
+	function confirmDiscardDraft() {
+		navDialogOpen = false;
+		clearDraft();
+		if (pendingNavigation) goto(pendingNavigation);
+	}
 
 	function selectLine(line: Line) {
 		selectedLine = line;
 		resetForm();
 	}
 
-	function statusFor(actual: string | number, standard: number, exact = false): 'OK' | 'NG' | null {
+	function statusFor(
+		actual: string | number,
+		standard: number,
+		mode: 'min' | 'exact' = 'min'
+	): 'OK' | 'NG' | null {
 		if (actual === '' || actual === null || actual === undefined) return null;
 		const value = Number(actual);
 		if (!Number.isFinite(value)) return null;
-		if (exact) {
-			return value === standard ? 'OK' : 'NG';
-		}
-		return value >= standard ? 'OK' : 'NG';
+		return mode === 'exact' ? (value === standard ? 'OK' : 'NG') : value >= standard ? 'OK' : 'NG';
 	}
 
 	async function prepare(nextStage: 'START' | 'MIDDLE' | 'END') {
@@ -377,7 +390,7 @@
 				const answer = lengthAnswers[length.lengthNo];
 				if (!answer?.actualMm) return `Length "${length.lengthNo}" belum diisi.`;
 				if (
-					statusFor(answer.actualMm, length.standardMm, true) === 'NG' &&
+					statusFor(answer.actualMm, length.standardMm, 'exact') === 'NG' &&
 					!answer.remarks.trim()
 				) {
 					return `Remarks wajib diisi untuk Length "${length.lengthNo}" yang NG.`;
@@ -419,6 +432,13 @@
 				return;
 			}
 
+			const spotOk =
+				payload.spotActual !== null &&
+				statusFor(payload.spotActual, spec!.spotStandard ?? 0, 'exact') === 'OK';
+			const spotNg =
+				payload.spotActual !== null &&
+				statusFor(payload.spotActual, spec!.spotStandard ?? 0, 'exact') === 'NG';
+
 			const okCount =
 				(payload.points?.filter((p) => p.status === 'OK').length ?? 0) +
 				(payload.hardwares?.filter(
@@ -433,9 +453,11 @@
 						statusFor(
 							l.actualMm,
 							spec!.lengths.find((x) => x.lengthNo === l.lengthNo)!.standardMm,
-							true
+							'exact'
 						) === 'OK'
-				).length ?? 0);
+				).length ?? 0) +
+				(spotOk ? 1 : 0) +
+				(payload.visualStatus === 'OK' ? 1 : 0);
 			const ngCount =
 				(payload.points?.filter((p) => p.status === 'NG').length ?? 0) +
 				(payload.hardwares?.filter(
@@ -450,15 +472,18 @@
 						statusFor(
 							l.actualMm,
 							spec!.lengths.find((x) => x.lengthNo === l.lengthNo)!.standardMm,
-							true
+							'exact'
 						) === 'NG'
-				).length ?? 0);
+				).length ?? 0) +
+				(spotNg ? 1 : 0) +
+				(payload.visualStatus === 'NG' ? 1 : 0);
 
 			toast.success(
 				`Inspeksi tersimpan. Overall: ${body.data.overallStatus}. Detail: ${okCount} OK, ${ngCount} NG.`
 			);
-			partNo = '';
+			const nextPartNo = spec!.partNo;
 			resetFlow();
+			partNo = nextPartNo;
 		} finally {
 			submitting = false;
 		}
@@ -723,13 +748,13 @@
 								<span class="text-sm text-muted-foreground">
 									Standard: {spec.spotStandard}
 								</span>
-								{#if statusFor(spotActual, spec.spotStandard ?? 0, true)}
+								{#if statusFor(spotActual, spec.spotStandard ?? 0, 'exact')}
 									<Badge
-										variant={statusFor(spotActual, spec.spotStandard ?? 0, true) === 'OK'
+										variant={statusFor(spotActual, spec.spotStandard ?? 0, 'exact') === 'OK'
 											? 'default'
 											: 'destructive'}
 									>
-										{statusFor(spotActual, spec.spotStandard ?? 0, true)}
+										{statusFor(spotActual, spec.spotStandard ?? 0, 'exact')}
 									</Badge>
 								{/if}
 							</div>
@@ -792,7 +817,7 @@
 							{@const status = statusFor(
 								lengthAnswers[length.lengthNo]?.actualMm ?? '',
 								length.standardMm,
-								true
+								'exact'
 							)}
 							<div class="grid gap-2 rounded-lg border p-3">
 								<div class="flex items-center justify-between gap-3">
@@ -936,6 +961,22 @@
 		<Dialog.Footer>
 			<Button variant="outline" onclick={cancelRecheck}>Batal</Button>
 			<Button onclick={confirmRecheck}>Ya, Re-check</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>
+
+<Dialog.Root bind:open={navDialogOpen}>
+	<Dialog.Content class="sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>Buang Draft Inspeksi?</Dialog.Title>
+			<Dialog.Description>
+				Ada data inspeksi yang belum disimpan. Jika Anda meninggalkan halaman ini, draft akan
+				dihapus.
+			</Dialog.Description>
+		</Dialog.Header>
+		<Dialog.Footer>
+			<Button variant="outline" onclick={() => (navDialogOpen = false)}>Tetap di Sini</Button>
+			<Button variant="destructive" onclick={confirmDiscardDraft}>Buang Draft &amp; Lanjut</Button>
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>

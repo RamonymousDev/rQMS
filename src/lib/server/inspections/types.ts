@@ -62,7 +62,11 @@ export const submitSchema = z.object({
 
 export type SubmitInput = z.infer<typeof submitSchema>;
 
-/** Rule #9: actual >= standard → OK. Berlaku untuk Spot, Hardware, Length. */
-export function statusFor(actual: number, standard: number): 'OK' | 'NG' {
-	return actual >= standard ? 'OK' : 'NG';
+/** Status per aturan bisnis. mode 'min' = actual >= standard (Hardware), 'exact' = actual === standard (Spot, Length). */
+export function statusFor(
+	actual: number,
+	standard: number,
+	mode: 'min' | 'exact' = 'min'
+): 'OK' | 'NG' {
+	return mode === 'exact' ? (actual === standard ? 'OK' : 'NG') : actual >= standard ? 'OK' : 'NG';
 }
