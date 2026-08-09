@@ -32,6 +32,7 @@ RQMS (Quality Management System) adalah aplikasi web untuk pencatatan dan monito
 | Icons         | `@lucide/svelte`                                          |
 | Validation    | Zod v4                                                    |
 | Realtime      | SSE + Postgres LISTEN/NOTIFY                              |
+| Charts        | LayerChart (donut/bar di dashboard)                       |
 | QR            | html5-qrcode                                              |
 
 **Lock file**: `bun.lock` di-commit. Jangan pakai `npm` atau `yarn`.
@@ -119,6 +120,7 @@ src/
 │       ├── rate-limit.ts       # enforceRateLimit() — Redis sliding-window
 │       ├── redis.ts            # Singleton Redis client (ioredis) + rateLimit()
 │       ├── shift.ts            # getShift, getOperationalDate/DayRange (+ helper kalender legacy)
+│       ├── dashboard.ts        # getDashboardStats (total/today/trend 7 hari operasional), getRecentInspections
 │       ├── board/
 │       │   └── index.ts        # getBoardData, getInspectionHistory, resolveConfigId
 │       ├── configs/
@@ -678,11 +680,30 @@ Tanpa ini semua `option.value` jadi `undefined` → error `each_key_duplicate`.
 Semua ada di `src/lib/components/ui/`:
 
 ```
-alert, avatar, badge, breadcrumb, button, card, checkbox, dialog,
+alert, avatar, badge, breadcrumb, button, card, chart, checkbox, dialog,
 dropdown-menu, empty, field, input, label, pagination, progress,
 qr-scanner, select, separator, sheet, sidebar, skeleton, sonner,
 switch, table, tabs, textarea, toggle, toggle-group, tooltip
 ```
+
+### Chart (LayerChart)
+
+Chart dipakai di dashboard (`(app)/dashboard/+page.svelte`) untuk donut OK/NG
+(`PieChart`) dan tren 7 hari operasional (`BarChart`). Pola yang dipakai:
+
+```ts
+import * as Chart from '$lib/components/ui/chart/index.js';
+import { BarChart, PieChart } from 'layerchart';
+```
+
+- Setiap chart dibungkus `<Chart.Container config={...}>` — config memberi
+  label + warna via `theme: { light, dark }`, dan `ChartStyle` menginjeksi
+  CSS var `--color-<key>` yang scoped ke container. Tooltip pakai
+  `<Chart.Tooltip />` (atau `hideLabel` untuk pie donut).
+- PieChart: `cDomain` + `cRange` override warna per slice; `innerRadius`
+  untuk donut.
+- BarChart: `seriesLayout="group"` + array `series` berisi `{ key, label, color }`;
+  value tiap bar otomatis mengikuti nama kolom `key` di data (x1/y1 = `s.value ?? s.key`).
 
 ### Menambah Komponen Baru
 
@@ -1053,19 +1074,20 @@ Yang sudah memakai hari operasional:
 
 ## 17. Dependensi Kunci
 
-| Package         | Versi    | Kegunaan                                     |
-| --------------- | -------- | -------------------------------------------- |
-| `svelte`        | ^5.56.1  | Framework utama (runes mode)                 |
-| `@sveltejs/kit` | ^2.63.0  | SSR, routing, form actions                   |
-| `drizzle-orm`   | ^0.45.2  | ORM type-safe                                |
-| `postgres`      | ^3.4.9   | Driver Postgres (postgres.js)                |
-| `jose`          | ^6.2.8   | JWT sign/verify                              |
-| `argon2`        | ^0.45.1  | Password hashing                             |
-| `ioredis`       | ^6.0.0   | Redis client (session blacklist, rate limit) |
-| `zod`           | ^4.4.3   | Validasi schema                              |
-| `bits-ui`       | ^2.16.3  | Primitive UI (Radix-like)                    |
-| `shadcn-svelte` | ^1.5.0   | UI components                                |
-| `tailwindcss`   | ^4.3.0   | Styling                                      |
-| `svelte-sonner` | ^1.1.0   | Toast notifications                          |
-| `html5-qrcode`  | ^2.3.8   | QR scanner di browser                        |
-| `drizzle-kit`   | ^0.31.10 | Migrasi & introspeksi DB                     |
+| Package         | Versi    | Kegunaan                                      |
+| --------------- | -------- | --------------------------------------------- |
+| `svelte`        | ^5.56.1  | Framework utama (runes mode)                  |
+| `@sveltejs/kit` | ^2.63.0  | SSR, routing, form actions                    |
+| `drizzle-orm`   | ^0.45.2  | ORM type-safe                                 |
+| `postgres`      | ^3.4.9   | Driver Postgres (postgres.js)                 |
+| `jose`          | ^6.2.8   | JWT sign/verify                               |
+| `argon2`        | ^0.45.1  | Password hashing                              |
+| `ioredis`       | ^6.0.0   | Redis client (session blacklist, rate limit)  |
+| `zod`           | ^4.4.3   | Validasi schema                               |
+| `bits-ui`       | ^2.16.3  | Primitive UI (Radix-like)                     |
+| `shadcn-svelte` | ^1.5.0   | UI components                                 |
+| `tailwindcss`   | ^4.3.0   | Styling                                       |
+| `svelte-sonner` | ^1.1.0   | Toast notifications                           |
+| `layerchart`    | ^2.0.0   | Chart library (di `$lib/components/ui/chart`) |
+| `html5-qrcode`  | ^2.3.8   | QR scanner di browser                         |
+| `drizzle-kit`   | ^0.31.10 | Migrasi & introspeksi DB                      |

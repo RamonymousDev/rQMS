@@ -16,26 +16,46 @@
 	import * as Alert from '$lib/components/ui/alert/index.js';
 	import { Progress } from '$lib/components/ui/progress/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
+	import * as Chart from '$lib/components/ui/chart/index.js';
+	import { BarChart, PieChart } from 'layerchart';
 	import { getShift } from '$lib/shift.js';
+	import type { DashboardStats } from '$lib/server/dashboard.js';
 
 	import MapPinIcon from '@lucide/svelte/icons/map-pin';
 	import ClipboardListIcon from '@lucide/svelte/icons/clipboard-list';
 	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
 	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 	import ClockIcon from '@lucide/svelte/icons/clock';
+	import PieChartIcon from '@lucide/svelte/icons/pie-chart';
+	import ChartColumnIcon from '@lucide/svelte/icons/chart-column';
 
 	const { data } = $props();
 	const lines = $derived(data?.lines ?? []);
 	const inspections = $derived(data?.inspections ?? []);
-	const okCount = $derived(data?.okCount ?? 0);
-	const ngCount = $derived(data?.ngCount ?? 0);
+	const stats = $derived<DashboardStats>(
+		data?.stats ?? {
+			totals: { ok: 0, ng: 0, total: 0 },
+			today: { ok: 0, ng: 0, total: 0 },
+			trend: []
+		}
+	);
+
+	const okRate = $derived(computeOkRate(stats.today.ok, stats.today.ng));
+
+	const statusChartConfig = {
+		ok: { label: 'OK', theme: { light: '#16a34a', dark: '#4ade80' } },
+		ng: { label: 'NG', theme: { light: '#dc2626', dark: '#f87171' } }
+	} satisfies Chart.ChartConfig;
+
+	const donutData = $derived([
+		{ key: 'ok', label: 'OK', value: stats.totals.ok },
+		{ key: 'ng', label: 'NG', value: stats.totals.ng }
+	]);
 
 	function computeOkRate(ok: number, ng: number) {
 		const total = ok + ng;
 		return total === 0 ? 0 : Math.round((ok / total) * 100);
 	}
-
-	const okRate = $derived(computeOkRate(okCount, ngCount));
 
 	let now = $state(new Date());
 	let shift = $derived(getShift(now));
@@ -93,34 +113,100 @@
 
 		<Card.Root>
 			<Card.Header class="flex flex-row items-center justify-between pb-2">
-				<Card.Title class="text-sm font-medium">Recent Inspections</Card.Title>
+				<Card.Title class="text-sm font-medium">Inspeksi Hari Ini</Card.Title>
 				<ClipboardListIcon class="size-4 text-muted-foreground" />
 			</Card.Header>
 			<Card.Content>
-				<div class="text-2xl font-bold">{inspections.length}</div>
-				<p class="text-xs text-muted-foreground">Inspeksi terbaru</p>
+				<div class="text-2xl font-bold">{stats.today.total}</div>
+				<p class="text-xs text-muted-foreground">Hari operasional berjalan</p>
 			</Card.Content>
 		</Card.Root>
 
 		<Card.Root>
 			<Card.Header class="flex flex-row items-center justify-between pb-2">
-				<Card.Title class="text-sm font-medium">OK Count</Card.Title>
+				<Card.Title class="text-sm font-medium">OK Hari Ini</Card.Title>
 				<CircleCheckIcon class="size-4 text-green-600 dark:text-green-400" />
 			</Card.Header>
 			<Card.Content>
-				<div class="text-2xl font-bold">{okCount}</div>
+				<div class="text-2xl font-bold">{stats.today.ok}</div>
 				<Progress value={okRate} class="mt-2 h-2" />
+				<p class="mt-1 text-xs text-muted-foreground">OK rate {okRate}%</p>
 			</Card.Content>
 		</Card.Root>
 
 		<Card.Root>
 			<Card.Header class="flex flex-row items-center justify-between pb-2">
-				<Card.Title class="text-sm font-medium">NG Count</Card.Title>
+				<Card.Title class="text-sm font-medium">NG Hari Ini</Card.Title>
 				<TriangleAlertIcon class="size-4 text-destructive" />
 			</Card.Header>
 			<Card.Content>
-				<div class="text-2xl font-bold">{ngCount}</div>
+				<div class="text-2xl font-bold">{stats.today.ng}</div>
 				<p class="text-xs text-muted-foreground">Perlu perhatian</p>
+			</Card.Content>
+		</Card.Root>
+	</div>
+
+	<div class="grid grid-cols-1 gap-4 lg:grid-cols-5">
+		<Card.Root class="lg:col-span-2">
+			<Card.Header>
+				<Card.Title class="flex items-center gap-2 text-sm">
+					<PieChartIcon class="size-4 text-muted-foreground" />
+					Distribusi Hasil
+				</Card.Title>
+				<Card.Description>Perbandingan OK / NG sepanjang masa</Card.Description>
+			</Card.Header>
+			<Card.Content>
+				{#if stats.totals.total === 0}
+					<div class="flex h-[220px] items-center justify-center text-sm text-muted-foreground">
+						Belum ada data inspeksi
+					</div>
+				{:else}
+					<Chart.Container config={statusChartConfig} class="h-[220px] w-full">
+						<PieChart
+							data={donutData}
+							key="key"
+							label="label"
+							value="value"
+							cDomain={['ok', 'ng']}
+							cRange={['var(--color-ok)', 'var(--color-ng)']}
+							innerRadius={55}
+							outerRadius={85}
+							legend
+						>
+							{#snippet tooltip()}
+								<Chart.Tooltip hideLabel />
+							{/snippet}
+						</PieChart>
+					</Chart.Container>
+				{/if}
+			</Card.Content>
+		</Card.Root>
+
+		<Card.Root class="lg:col-span-3">
+			<Card.Header>
+				<Card.Title class="flex items-center gap-2 text-sm">
+					<ChartColumnIcon class="size-4 text-muted-foreground" />
+					Tren Inspeksi
+				</Card.Title>
+				<Card.Description>Hasil 7 hari operasional terakhir</Card.Description>
+			</Card.Header>
+			<Card.Content>
+				<Chart.Container config={statusChartConfig} class="h-[240px] w-full">
+					<BarChart
+						data={stats.trend}
+						x="label"
+						seriesLayout="group"
+						series={[
+							{ key: 'ok', label: 'OK', color: 'var(--color-ok)' },
+							{ key: 'ng', label: 'NG', color: 'var(--color-ng)' }
+						]}
+						legend
+					>
+						{#snippet tooltip()}
+							<Chart.Tooltip />
+						{/snippet}
+					</BarChart>
+				</Chart.Container>
 			</Card.Content>
 		</Card.Root>
 	</div>
