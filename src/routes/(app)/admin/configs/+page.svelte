@@ -17,7 +17,7 @@
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
-	import * as Select from '$lib/components/ui/select/index.js';
+	import Combobox from '$lib/components/combobox.svelte';
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 
@@ -175,10 +175,6 @@
 	function closeDialog() {
 		dialogOpen = false;
 		editing = null;
-	}
-
-	function labelFor(options: Option[], value: string): string {
-		return options.find((o) => o.value === value)?.label ?? '';
 	}
 
 	function summaryOf(row: ConfigRow): string {
@@ -353,22 +349,13 @@
 						{#if editing}
 							<Input value={editing.part?.partNo ?? ''} disabled />
 						{:else}
-							<Select.Root type="single" bind:value={partId}>
-								<Select.Trigger class="w-full">
-									{#if labelFor(partOptions, partId)}
-										<span>{labelFor(partOptions, partId)}</span>
-									{:else}
-										<span class="text-muted-foreground">Pilih part</span>
-									{/if}
-								</Select.Trigger>
-								<Select.Content>
-									{#each partOptions as option (option.value)}
-										<Select.Item value={option.value} label={option.label}>
-											{option.label}
-										</Select.Item>
-									{/each}
-								</Select.Content>
-							</Select.Root>
+							<Combobox
+								options={partOptions}
+								bind:value={partId}
+								placeholder="Pilih part"
+								searchPlaceholder="Cari part no / nama..."
+								emptyText="Part tidak ditemukan."
+							/>
 						{/if}
 					</div>
 					<div class="grid gap-2">
@@ -376,22 +363,13 @@
 						{#if editing}
 							<Input value={editing.line?.code ?? ''} disabled />
 						{:else}
-							<Select.Root type="single" bind:value={lineId}>
-								<Select.Trigger class="w-full">
-									{#if labelFor(lineOptions, lineId)}
-										<span>{labelFor(lineOptions, lineId)}</span>
-									{:else}
-										<span class="text-muted-foreground">Pilih line</span>
-									{/if}
-								</Select.Trigger>
-								<Select.Content>
-									{#each lineOptions as option (option.value)}
-										<Select.Item value={option.value} label={option.label}>
-											{option.label}
-										</Select.Item>
-									{/each}
-								</Select.Content>
-							</Select.Root>
+							<Combobox
+								options={lineOptions}
+								bind:value={lineId}
+								placeholder="Pilih line"
+								searchPlaceholder="Cari line code / nama..."
+								emptyText="Line tidak ditemukan."
+							/>
 						{/if}
 					</div>
 				</div>
@@ -461,22 +439,13 @@
 						<div class="grid gap-2">
 							{#each hardwareRows as hw, i (i)}
 								<div class="grid gap-2 sm:grid-cols-[2fr_1fr_1fr_auto] sm:items-center">
-									<Select.Root type="single" bind:value={hw.hardwareId}>
-										<Select.Trigger class="w-full">
-											{#if labelFor(hardwareOptions, hw.hardwareId)}
-												<span class="truncate">{labelFor(hardwareOptions, hw.hardwareId)}</span>
-											{:else}
-												<span class="text-muted-foreground">Pilih hardware</span>
-											{/if}
-										</Select.Trigger>
-										<Select.Content>
-											{#each hardwareOptions as option (option.value)}
-												<Select.Item value={option.value} label={option.label}>
-													{option.label}
-												</Select.Item>
-											{/each}
-										</Select.Content>
-									</Select.Root>
+									<Combobox
+										options={hardwareOptions}
+										bind:value={hw.hardwareId}
+										placeholder="Pilih hardware"
+										searchPlaceholder="Cari hw no / nama..."
+										emptyText="Hardware tidak ditemukan."
+									/>
 									<Input
 										type="number"
 										min="0"
