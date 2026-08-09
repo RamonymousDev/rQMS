@@ -2,7 +2,7 @@ import { and, desc, eq, gte, lt } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { inspections, lines, partLineConfigs, parts } from '../db/schema.js';
 import type { Stage } from '../inspections/types.js';
-import { getOperationalDate, getOperationalDayRange } from '../shift.js';
+import { getOperationalDate, getOperationalDayRange, getShift } from '../shift.js';
 
 export type ShiftKey = 'DAY' | 'NIGHT';
 export type StageKey = Stage;
@@ -12,6 +12,10 @@ export interface StageStatus {
 	status: StatusValue;
 	/** id inspeksi terbaru, null kalau belum ada data */
 	latestInspectionId: string | null;
+	/** jumlah inspeksi pada kombinasi ini di hari operasional yang ditampilkan */
+	count: number;
+	/** timestamp (ISO) inspeksi terbaru, null kalau belum ada data */
+	latestInspectedAt: string | null;
 }
 
 export interface PartShiftStatus {
@@ -40,6 +44,8 @@ export interface BoardData {
 	date: string;
 	/** Tanggal operasional yang sedang berjalan sekarang — batas atas date picker. */
 	today: string;
+	/** Shift yang sedang berjalan (dihitung server, zona WIB). */
+	currentShift: ShiftKey;
 }
 
 const STAGES: StageKey[] = ['START', 'MIDDLE', 'END'];
@@ -48,7 +54,10 @@ const SHIFTS: ShiftKey[] = ['DAY', 'NIGHT'];
 function emptyShiftStatus(): PartShiftStatus {
 	const makeStages = (): Record<StageKey, StageStatus> =>
 		Object.fromEntries(
-			STAGES.map((s) => [s, { status: null, latestInspectionId: null }])
+			STAGES.map((s) => [
+				s,
+				{ status: null, latestInspectionId: null, count: 0, latestInspectedAt: null }
+			])
 		) as Record<StageKey, StageStatus>;
 	return { DAY: makeStages(), NIGHT: makeStages() };
 }
@@ -95,6 +104,7 @@ export async function getBoardData(
 	if (!line) return null;
 
 	const { date, today, range } = resolveBoardDate(dateKey);
+	const currentShift = getShift();
 
 	// 2. Ambil semua part yang terkonfigurasi di line ini (aktif)
 	const configs = await db.query.partLineConfigs.findMany({
@@ -105,7 +115,7 @@ export async function getBoardData(
 		columns: { id: true }
 	});
 
-	if (configs.length === 0) return { line, parts: [], date, today };
+	if (configs.length === 0) return { line, parts: [], date, today, currentShift };
 
 	// 3. Untuk tiap kombinasi (configId, shift, stage), ambil inspeksi terbaru.
 	//    Satu query per kombinasi terlalu banyak round-trips; kita ambil semua
@@ -133,12 +143,15 @@ export async function getBoardData(
 		)
 		.orderBy(desc(inspections.inspectedAt));
 
-	// 4. Group: configId → shift → stage → inspeksi terbaru (sudah sorted desc)
+	// 4. Group: configId → shift → stage → inspeksi terbaru (sudah sorted desc),
+	//    sekaligus hitung jumlah inspeksi per kombinasi untuk hari tersebut.
 	type InspRow = (typeof rows)[number];
 	const latestMap = new Map<string, InspRow>(); // key: `${configId}:${shift}:${stage}`
+	const countMap = new Map<string, number>();
 
 	for (const row of rows) {
 		const key = `${row.partLineConfigId}:${row.shift}:${row.stage}`;
+		countMap.set(key, (countMap.get(key) ?? 0) + 1);
 		if (!latestMap.has(key)) {
 			latestMap.set(key, row);
 		}
@@ -154,7 +167,9 @@ export async function getBoardData(
 				if (latest) {
 					status[shift][stage] = {
 						status: latest.overallStatus,
-						latestInspectionId: latest.id
+						latestInspectionId: latest.id,
+						count: countMap.get(key) ?? 0,
+						latestInspectedAt: latest.inspectedAt.toISOString()
 					};
 				}
 			}
@@ -171,7 +186,7 @@ export async function getBoardData(
 	// Sort by partNo ascending
 	boardParts.sort((a, b) => a.partNo.localeCompare(b.partNo));
 
-	return { line, parts: boardParts, date, today };
+	return { line, parts: boardParts, date, today, currentShift };
 }
 
 /**

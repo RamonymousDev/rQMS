@@ -9,68 +9,83 @@
 		StageKey,
 		InspectionHistoryRow
 	} from '$lib/server/board/index.js';
-	import StageBadgeRow from '$lib/components/board/stage-badge-row.svelte';
-	import * as Table from '$lib/components/ui/table/index.js';
+	import MonitorIcon from '@lucide/svelte/icons/monitor';
+	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+	import PartCard from '$lib/components/board/part-card.svelte';
+	import StatusSummary from '$lib/components/board/status-summary.svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
-	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
-	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
+	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { cn } from '$lib/utils.js';
+	import { applyTheme, getInitialTheme } from '$lib/theme/index.js';
 
 	const { data }: { data: PageData } = $props();
 
-	// ── Reactive state ───────────────────────────────────────────────────
 	let parts = $state<BoardPart[]>(untrack(() => data.parts));
-	let sseConnected = $state(false);
-
-	/**
-	 * Tanggal operasional yang sedang ditampilkan. Bisa berubah dari dua arah:
-	 * navigasi (`data.date`) dan payload SSE — board yang dibiarkan terbuka
-	 * melewati 07:30 WIB akan berpindah hari dengan sendirinya.
-	 */
 	let viewDate = $state(untrack(() => data.date));
 	let todayDate = $state(untrack(() => data.today));
+	let currentShift = $state(untrack(() => data.currentShift));
+	let sseConnected = $state(false);
 
 	const isToday = $derived(viewDate === todayDate);
 
-	// Modal state
-	let modalOpen = $state(false);
-	let modalLoading = $state(false);
-	let modalHistory = $state<InspectionHistoryRow[]>([]);
-	let modalTitle = $state('');
-	let modalSubtitle = $state('');
-	/** Set inspeksi yang sedang di-expand (by id) */
-	let expandedId = $state<string | null>(null);
+	let tvMode = $state(false);
+	let clockTime = $state('');
 
-	// ── SSE ──────────────────────────────────────────────────────────────
-	type BoardPayload = { parts: BoardPart[]; date: string; today: string };
+	function updateClock() {
+		const n = new Date();
+		const jt = new Date(n.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
+		const h = jt.getHours().toString().padStart(2, '0');
+		const m = jt.getMinutes().toString().padStart(2, '0');
+		const s = jt.getSeconds().toString().padStart(2, '0');
+		clockTime = `${h}:${m}:${s}`;
+	}
 
-	/**
-	 * Koneksi SSE dibuka ulang setiap kali line atau tanggal berubah, karena
-	 * server memfilter stream berdasarkan tanggal. Saat melihat hari berjalan,
-	 * `date` sengaja tidak dikirim agar server menghitung ulang hari operasional
-	 * pada tiap event — board yang menyala 24 jam ikut berganti hari sendiri.
-	 */
+	updateClock();
+
+	$effect(() => {
+		if (!tvMode) return;
+		const interval = setInterval(updateClock, 1000);
+		return () => clearInterval(interval);
+	});
+
+	$effect(() => {
+		if (tvMode) {
+			applyTheme('dark');
+		} else {
+			applyTheme(getInitialTheme());
+		}
+	});
+
 	$effect(() => {
 		const code = data.line.code;
 		const requested = data.date === data.today ? null : data.date;
 
-		// Sinkronkan tampilan dengan hasil SSR sebelum SSE mengambil alih.
 		parts = data.parts;
 		viewDate = data.date;
 		todayDate = data.today;
+		currentShift = data.currentShift;
 		sseConnected = false;
 
 		const query = requested ? `?date=${encodeURIComponent(requested)}` : '';
 		const es = new EventSource(`/api/board/${code}/stream${query}`);
 
 		const applyPayload = (e: MessageEvent) => {
-			const payload = JSON.parse(e.data) as BoardPayload;
+			const payload = JSON.parse(e.data) as {
+				parts: BoardPart[];
+				date: string;
+				today: string;
+				currentShift: ShiftKey;
+			};
 			parts = payload.parts;
 			viewDate = payload.date;
 			todayDate = payload.today;
+			currentShift = payload.currentShift;
 		};
 
 		es.addEventListener('init', (e) => {
@@ -88,13 +103,11 @@
 		return () => es.close();
 	});
 
-	// ── Filter tanggal ───────────────────────────────────────────────────
 	const DAY_MS = 24 * 60 * 60 * 1000;
 
 	function goToDate(next: string) {
 		if (!next || next === viewDate) return;
 		const code = data.line.code;
-		// Hari berjalan tidak perlu query — URL board tetap bersih untuk layar produksi.
 		goto(
 			next === todayDate
 				? resolve('/board/[code]', { code })
@@ -103,9 +116,7 @@
 		);
 	}
 
-	/** Geser tanggal operasional `delta` hari, tidak pernah melewati hari berjalan. */
 	function shiftDate(delta: number) {
-		// dateKey diperlakukan sebagai UTC midnight, jadi aritmetika ms aman dari DST.
 		const next = new Date(Date.parse(`${viewDate}T00:00:00.000Z`) + delta * DAY_MS)
 			.toISOString()
 			.slice(0, 10);
@@ -113,10 +124,6 @@
 		goToDate(next);
 	}
 
-	/**
-	 * Label ramah untuk tanggal operasional yang sedang ditampilkan.
-	 * Dirender sebagai UTC karena `viewDate` sudah berupa tanggal Jakarta.
-	 */
 	const dateLabel = $derived(
 		new Date(Date.parse(`${viewDate}T00:00:00.000Z`)).toLocaleDateString('id-ID', {
 			weekday: 'long',
@@ -127,12 +134,21 @@
 		})
 	);
 
-	// ── Badge click → buka Modal ─────────────────────────────────────────
-	const STAGE_LABELS: Record<StageKey, string> = { START: 'Start', MIDDLE: 'Middle', END: 'End' };
+	const shiftLabel = $derived(currentShift === 'DAY' ? 'Day Shift' : 'Night Shift');
+
+	// Modal state
+	let modalOpen = $state(false);
+	let modalLoading = $state(false);
+	let modalHistory = $state<InspectionHistoryRow[]>([]);
+	let modalTitle = $state('');
+	let modalSubtitle = $state('');
+	let expandedId = $state<string | null>(null);
 
 	async function handleBadgeClick(part: BoardPart, shift: ShiftKey, stage: StageKey) {
+		const STAGE_LABELS: Record<StageKey, string> = { START: 'Start', MIDDLE: 'Middle', END: 'End' };
+		const SHIFT_LABELS: Record<ShiftKey, string> = { DAY: 'Day', NIGHT: 'Night' };
 		modalTitle = `${part.partNo} — ${STAGE_LABELS[stage]}`;
-		modalSubtitle = `${shift === 'DAY' ? 'Day Shift' : 'Night Shift'} · ${data.line.code} · ${dateLabel}`;
+		modalSubtitle = `${SHIFT_LABELS[shift]} · ${data.line.code} · ${dateLabel}`;
 		modalHistory = [];
 		expandedId = null;
 		modalLoading = true;
@@ -144,7 +160,6 @@
 			);
 			if (res.ok) {
 				modalHistory = await res.json();
-				// Auto-expand inspeksi pertama (terbaru)
 				if (modalHistory.length > 0) expandedId = modalHistory[0].id;
 			}
 		} finally {
@@ -152,199 +167,222 @@
 		}
 	}
 
-	function toggleExpand(id: string) {
-		expandedId = expandedId === id ? null : id;
-	}
-
-	// ── Helpers ──────────────────────────────────────────────────────────
-	function formatDate(iso: string): string {
-		return new Date(iso).toLocaleString('id-ID', {
-			day: '2-digit',
-			month: 'short',
-			year: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit',
-			timeZone: 'Asia/Jakarta'
-		});
-	}
-
-	function statusClass(status: 'OK' | 'NG') {
-		return status === 'OK'
-			? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
-			: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400';
+	function toggleTvMode() {
+		tvMode = !tvMode;
 	}
 </script>
 
 <svelte:head>
-	<title>Parts Overview — {data.line.name}</title>
+	<title>Ringkasan Part — {data.line.name}</title>
 </svelte:head>
 
-<div class="min-h-screen bg-background">
+<div
+	class={cn(
+		'min-h-screen overflow-x-hidden bg-background transition-colors',
+		tvMode && 'bg-black text-white'
+	)}
+>
 	<!-- Header -->
-	<div class="border-b bg-card px-6 py-5">
-		<div class="mx-auto flex max-w-5xl items-start justify-between gap-4">
-			<div>
-				<div class="flex items-center gap-2">
-					<h1 class="text-2xl font-bold tracking-tight">Parts Overview</h1>
-					<Badge variant="secondary" class="font-mono text-xs">{data.line.code}</Badge>
+	<header
+		class={cn('border-b bg-card px-6 py-5 transition-colors', tvMode && 'border-white/10 bg-black')}
+	>
+		<div
+			class="mx-auto flex max-w-6xl flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"
+		>
+			<div class="min-w-0">
+				<div class="flex flex-wrap items-center gap-2.5">
+					<h1 class="text-2xl font-bold tracking-tight">Ringkasan Part</h1>
+					<Badge
+						variant="secondary"
+						class={cn('font-mono text-xs', tvMode && 'border-white/20 bg-white/10 text-white')}
+					>
+						{data.line.code}
+					</Badge>
 					{#if sseConnected}
-						<span class="flex items-center gap-1 text-xs text-green-600">
+						<span
+							class="flex items-center gap-1.5 text-xs font-medium text-green-600 dark:text-green-400"
+						>
 							<span class="inline-block h-2 w-2 animate-pulse rounded-full bg-green-500"></span>
 							Live
 						</span>
 					{:else}
-						<span class="flex items-center gap-1 text-xs text-muted-foreground">
+						<span class="flex items-center gap-1.5 text-xs text-muted-foreground">
 							<span class="inline-block h-2 w-2 rounded-full bg-muted-foreground/50"></span>
-							Connecting…
+							Menghubungkan…
 						</span>
 					{/if}
 				</div>
-				<p class="mt-1 text-sm text-muted-foreground">
-					{data.line.name} · Click a stage badge to view inspection history for that shift.
+				<p class={cn('mt-1.5 text-sm text-muted-foreground', tvMode && 'text-white/60')}>
+					{data.line.name} · Klik badge stage untuk melihat riwayat inspeksi shift tersebut.
 				</p>
 			</div>
 
-			<div class="flex shrink-0 flex-col items-end gap-3">
+			<div class="flex w-full flex-col items-start gap-3 lg:w-auto lg:items-end">
 				<!-- Legend -->
-				<div class="flex items-center gap-4 text-xs text-muted-foreground">
+				<div
+					class={cn(
+						'flex flex-wrap items-center gap-4 text-xs',
+						tvMode ? 'text-white/50' : 'text-muted-foreground'
+					)}
+				>
 					<div class="flex items-center gap-1.5">
-						<span class="h-4 w-4 rounded-full bg-green-500"></span>
+						<span class="h-3 w-3 rounded-full bg-green-500"></span>
 						<span>OK</span>
 					</div>
 					<div class="flex items-center gap-1.5">
-						<span class="h-4 w-4 rounded-full bg-red-500"></span>
+						<span class="h-3 w-3 rounded-full bg-red-500"></span>
 						<span>NG</span>
 					</div>
 					<div class="flex items-center gap-1.5">
-						<span class="h-4 w-4 rounded-full bg-muted-foreground/30"></span>
+						<span class="h-3 w-3 rounded-full bg-muted-foreground/30"></span>
 						<span>—</span>
 					</div>
 				</div>
 
-				<!-- Filter tanggal operasional -->
-				<div class="flex items-center gap-1.5">
+				<!-- Actions: Mode TV + Navigasi Tanggal, dikelompokkan jadi satu toolbar -->
+				<div
+					class={cn(
+						'flex flex-wrap items-center gap-1 rounded-lg border p-1',
+						tvMode ? 'border-white/10 bg-white/5' : 'border-border bg-muted/40'
+					)}
+				>
 					<Button
-						variant="outline"
+						variant={tvMode ? 'default' : 'ghost'}
 						size="sm"
-						class="h-8 w-8 p-0"
-						aria-label="Hari sebelumnya"
-						onclick={() => shiftDate(-1)}
+						class={cn(
+							'h-8 gap-1.5 text-xs',
+							tvMode && 'bg-amber-500 text-black hover:bg-amber-400'
+						)}
+						onclick={toggleTvMode}
 					>
-						‹
+						<MonitorIcon class="h-3.5 w-3.5" />
+						Mode TV
 					</Button>
-					<Input
-						type="date"
-						max={todayDate}
-						value={viewDate}
-						aria-label="Tanggal operasional"
-						class="h-8 w-[9.5rem] text-xs"
-						onchange={(e) => goToDate(e.currentTarget.value)}
-					/>
-					<Button
-						variant="outline"
-						size="sm"
-						class="h-8 w-8 p-0"
-						aria-label="Hari berikutnya"
-						disabled={isToday}
-						onclick={() => shiftDate(1)}
-					>
-						›
-					</Button>
-					<Button
-						variant={isToday ? 'secondary' : 'outline'}
-						size="sm"
-						class="h-8 text-xs"
-						disabled={isToday}
-						onclick={() => goToDate(todayDate)}
-					>
-						Hari ini
-					</Button>
+
+					{#if !tvMode}
+						<Separator orientation="vertical" class="mx-0.5 h-5" />
+						<div class="flex items-center">
+							<Button
+								variant="ghost"
+								size="sm"
+								class="h-8 w-8 p-0"
+								aria-label="Hari sebelumnya"
+								onclick={() => shiftDate(-1)}
+							>
+								<ChevronLeftIcon class="h-4 w-4" />
+							</Button>
+							<Input
+								type="date"
+								max={todayDate}
+								value={viewDate}
+								aria-label="Tanggal operasional"
+								class="h-8 w-[9.5rem] border-0 bg-transparent text-xs shadow-none"
+								onchange={(e) => goToDate(e.currentTarget.value)}
+							/>
+							<Button
+								variant="ghost"
+								size="sm"
+								class="h-8 w-8 p-0"
+								aria-label="Hari berikutnya"
+								disabled={isToday}
+								onclick={() => shiftDate(1)}
+							>
+								<ChevronRightIcon class="h-4 w-4" />
+							</Button>
+							<Separator orientation="vertical" class="mx-0.5 h-5" />
+							<Button
+								variant={isToday ? 'secondary' : 'ghost'}
+								size="sm"
+								class="h-8 text-xs"
+								disabled={isToday}
+								onclick={() => goToDate(todayDate)}
+							>
+								Hari ini
+							</Button>
+						</div>
+					{/if}
 				</div>
 			</div>
 		</div>
 
-		<!-- Konteks tanggal: shift malam melewati tengah malam, jadi perlu eksplisit -->
-		<div class="mx-auto mt-3 max-w-5xl">
-			<p class="text-xs text-muted-foreground">
-				Menampilkan <span class="font-medium text-foreground">{dateLabel}</span>
-				· 07:30 hari itu s/d 07:30 hari berikutnya (WIB){#if !isToday}
-					<span class="ms-1 text-amber-600 dark:text-amber-500">· data historis</span>
-				{/if}
-			</p>
-		</div>
-	</div>
+		<!-- Mode TV: Jam Besar -->
+		{#if tvMode}
+			<div class="mx-auto mt-5 flex max-w-6xl flex-col items-center">
+				<p
+					class="font-mono text-7xl font-bold tracking-tight text-amber-400 tabular-nums sm:text-8xl"
+				>
+					{clockTime}
+				</p>
+				<p class="mt-2 text-lg text-white/70">
+					{shiftLabel} · {dateLabel}
+				</p>
+			</div>
+		{/if}
 
-	<!-- Table -->
-	<div class="mx-auto max-w-5xl px-6 py-6">
+		<!-- Konteks tanggal -->
+		{#if !tvMode}
+			<div class="mx-auto mt-3 max-w-6xl">
+				<p class="text-xs text-muted-foreground">
+					Menampilkan <span class="font-medium text-foreground">{dateLabel}</span>
+					· 07:30 hari itu s/d 07:30 hari berikutnya (WIB)
+					{#if !isToday}
+						<span class="ms-1 text-amber-600 dark:text-amber-500">· data historis</span>
+					{/if}
+				</p>
+			</div>
+		{/if}
+	</header>
+
+	<!-- Status Summary: tetap tampil di Mode TV karena jumlah NG adalah info paling penting di board -->
+	<StatusSummary {parts} date={viewDate} today={todayDate} {tvMode} />
+
+	<!--
+		Parts Grid — responsif di semua viewport:
+		HP 1 kolom · tablet 2 · laptop 3 · PC 4 · TV/2xl auto-fill memenuhi layar.
+		Connector antar badge fleksibel sehingga kartu tetap muat berapapun lebarnya.
+	-->
+	<main class={cn('mx-auto max-w-6xl px-6 py-6', tvMode && 'w-full max-w-none px-8 py-8')}>
 		{#if parts.length === 0}
-			<div class="flex flex-col items-center gap-2 py-20 text-center text-muted-foreground">
+			<div
+				class={cn(
+					'flex flex-col items-center gap-2 py-20 text-center text-muted-foreground',
+					tvMode && 'text-white/60'
+				)}
+			>
 				<p class="text-lg font-medium">Belum ada part terkonfigurasi</p>
 				<p class="text-sm">Tambahkan konfigurasi part untuk line ini terlebih dahulu.</p>
 			</div>
-			<!-- Catatan: daftar part berasal dari config aktif, bukan dari inspeksi,
-			     sehingga tabel tetap tampil (dengan badge kosong) pada tanggal tanpa data. -->
 		{:else}
-			<div class="rounded-lg border bg-card shadow-sm">
-				<Table.Root>
-					<Table.Header>
-						<Table.Row class="hover:bg-transparent">
-							<Table.Head class="w-32 font-semibold">Part No.</Table.Head>
-							<Table.Head class="font-semibold">Part Name</Table.Head>
-							<Table.Head class="text-center font-semibold">Day Shift</Table.Head>
-							<Table.Head class="text-center font-semibold">Night Shift</Table.Head>
-						</Table.Row>
-					</Table.Header>
-					<Table.Body>
-						{#each parts as part (part.configId)}
-							<Table.Row class="border-b last:border-b-0">
-								<Table.Cell class="font-mono font-bold text-primary">{part.partNo}</Table.Cell>
-								<Table.Cell class="max-w-[14rem] leading-snug font-medium break-words uppercase">
-									{part.partName}
-								</Table.Cell>
-								<Table.Cell class="text-center">
-									<div class="flex justify-center">
-										<StageBadgeRow
-											shift="DAY"
-											statuses={part.status.DAY}
-											onBadgeClick={(shift, stage) => handleBadgeClick(part, shift, stage)}
-										/>
-									</div>
-								</Table.Cell>
-								<Table.Cell class="text-center">
-									<div class="flex justify-center">
-										<StageBadgeRow
-											shift="NIGHT"
-											statuses={part.status.NIGHT}
-											onBadgeClick={(shift, stage) => handleBadgeClick(part, shift, stage)}
-										/>
-									</div>
-								</Table.Cell>
-							</Table.Row>
-						{/each}
-					</Table.Body>
-				</Table.Root>
+			<div
+				class={cn(
+					'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-[repeat(auto-fill,minmax(15rem,1fr))]',
+					tvMode &&
+						'gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-[repeat(auto-fill,minmax(20rem,1fr))]'
+				)}
+			>
+				{#each parts as part (part.configId)}
+					<PartCard {part} {currentShift} onBadgeClick={handleBadgeClick} {tvMode} />
+				{/each}
 			</div>
 		{/if}
-	</div>
+	</main>
 </div>
 
-<!-- Modal: Inspection History -->
+<!-- Modal: Riwayat Inspeksi -->
 <Dialog.Root bind:open={modalOpen}>
 	<Dialog.Portal>
 		<Dialog.Overlay />
 		<Dialog.Content class="flex max-h-[85vh] w-full max-w-lg flex-col gap-0 p-0">
-			<!-- Header -->
 			<Dialog.Header class="border-b px-6 py-4">
 				<Dialog.Title class="text-base">{modalTitle}</Dialog.Title>
 				<Dialog.Description class="text-xs">{modalSubtitle}</Dialog.Description>
 			</Dialog.Header>
 
-			<!-- List -->
 			<div class="flex-1 overflow-y-auto px-6 py-4">
 				{#if modalLoading}
 					<div class="space-y-2">
 						{#each [0, 1, 2, 3] as i (i)}
-							<Skeleton class="h-14 w-full rounded-md" />
+							<Skeleton class="h-16 w-full" />
 						{/each}
 					</div>
 				{:else if modalHistory.length === 0}
@@ -367,28 +405,26 @@
 										: 'border-border'
 								)}
 							>
-								<!-- Summary row — klik untuk expand -->
 								<button
 									type="button"
 									class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
-									onclick={() => toggleExpand(row.id)}
+									onclick={() => (expandedId = isExpanded ? null : row.id)}
 								>
-									<!-- Nomor urut (dari terlama = #1) -->
 									<span class="w-7 shrink-0 text-center text-xs font-bold text-muted-foreground">
 										#{num}
 									</span>
 
-									<!-- Status badge -->
 									<span
 										class={cn(
 											'shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold',
-											statusClass(row.overallStatus)
+											row.overallStatus === 'OK'
+												? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
+												: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400'
 										)}
 									>
 										{row.overallStatus}
 									</span>
 
-									<!-- Info -->
 									<div class="min-w-0 flex-1">
 										<p class="truncate text-xs font-medium">
 											{row.operatorName}
@@ -397,37 +433,30 @@
 											{/if}
 										</p>
 										<p class="text-xs text-muted-foreground">
-											{formatDate(row.inspectedAt.toString())}
+											{new Date(row.inspectedAt).toLocaleString('id-ID', {
+												day: '2-digit',
+												month: 'short',
+												year: 'numeric',
+												hour: '2-digit',
+												minute: '2-digit',
+												timeZone: 'Asia/Jakarta'
+											})}
 										</p>
 									</div>
 
-									<!-- Chevron -->
 									<span
 										class={cn(
 											'shrink-0 text-muted-foreground transition-transform duration-200',
 											isExpanded ? 'rotate-180' : ''
 										)}
 									>
-										<svg
-											xmlns="http://www.w3.org/2000/svg"
-											class="h-4 w-4"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="2"
-											stroke-linecap="round"
-											stroke-linejoin="round"
-										>
-											<path d="m6 9 6 6 6-6" />
-										</svg>
+										<ChevronDownIcon class="h-4 w-4" />
 									</span>
 								</button>
 
-								<!-- Detail (expanded) -->
 								{#if isExpanded}
 									<div class="border-t bg-muted/20 px-4 pt-3 pb-4">
 										<div class="grid gap-3 text-sm">
-											<!-- Spot -->
 											{#if row.spotActual !== null && row.spotActual !== undefined}
 												<div class="grid gap-1">
 													<p
@@ -441,7 +470,6 @@
 												</div>
 											{/if}
 
-											<!-- Points -->
 											{#if row.points.length > 0}
 												<div class="grid gap-1">
 													<p
@@ -462,7 +490,9 @@
 															<span
 																class={cn(
 																	'shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold',
-																	statusClass(point.status)
+																	point.status === 'OK'
+																		? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
+																		: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400'
 																)}
 															>
 																{point.status}
@@ -472,7 +502,6 @@
 												</div>
 											{/if}
 
-											<!-- Hardwares -->
 											{#if row.hardwares.length > 0}
 												<div class="grid gap-1">
 													<p
@@ -498,7 +527,9 @@
 															<span
 																class={cn(
 																	'shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold',
-																	statusClass(hw.status)
+																	hw.status === 'OK'
+																		? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
+																		: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400'
 																)}
 															>
 																{hw.status}
@@ -508,7 +539,6 @@
 												</div>
 											{/if}
 
-											<!-- Lengths -->
 											{#if row.lengths.length > 0}
 												<div class="grid gap-1">
 													<p
@@ -533,7 +563,9 @@
 															<span
 																class={cn(
 																	'shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold',
-																	statusClass(length.status)
+																	length.status === 'OK'
+																		? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
+																		: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400'
 																)}
 															>
 																{length.status}
@@ -543,7 +575,6 @@
 												</div>
 											{/if}
 
-											<!-- Visual -->
 											{#if row.visualStatus}
 												<div class="grid gap-1">
 													<p
@@ -560,7 +591,9 @@
 														<span
 															class={cn(
 																'shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold',
-																statusClass(row.visualStatus)
+																row.visualStatus === 'OK'
+																	? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
+																	: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400'
 															)}
 														>
 															{row.visualStatus}
@@ -581,7 +614,6 @@
 				{/if}
 			</div>
 
-			<!-- Footer -->
 			<div class="border-t px-6 py-3">
 				<Dialog.Close
 					class="inline-flex h-9 w-full items-center justify-center rounded-md border bg-background text-sm font-medium hover:bg-accent"

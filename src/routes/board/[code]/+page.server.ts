@@ -19,6 +19,7 @@ export const load: PageServerLoad = async ({ params, url }) => {
 		line: data.line,
 		parts: data.parts,
 		date: data.date,
-		today: data.today
+		today: data.today,
+		currentShift: data.currentShift
 	};
 };
