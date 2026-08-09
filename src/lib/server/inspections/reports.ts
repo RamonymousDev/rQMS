@@ -78,22 +78,32 @@ export async function listInspections(params: URLSearchParams) {
 	const page = parsePositiveInt(params.get('page'), 1, Number.MAX_SAFE_INTEGER);
 	const pageSize = parsePositiveInt(params.get('pageSize'), PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX);
 
-	const [rows, [total]] = await Promise.all([
+	const [rows, [total], statusCounts] = await Promise.all([
 		db.query.inspections.findMany({
 			where,
 			orderBy: [desc(inspections.inspectedAt)],
 			limit: pageSize,
 			offset: (page - 1) * pageSize
 		}),
-		db.select({ value: count() }).from(inspections).where(where)
+		db.select({ value: count() }).from(inspections).where(where),
+		db
+			.select({ status: inspections.overallStatus, value: count() })
+			.from(inspections)
+			.where(where)
+			.groupBy(inspections.overallStatus)
 	]);
+
+	const ok = statusCounts.find((s) => s.status === 'OK')?.value ?? 0;
+	const ng = statusCounts.find((s) => s.status === 'NG')?.value ?? 0;
 
 	return {
 		rows,
 		page,
 		pageSize,
 		total: total.value,
-		totalPages: Math.max(1, Math.ceil(total.value / pageSize))
+		totalPages: Math.max(1, Math.ceil(total.value / pageSize)),
+		ok,
+		ng
 	};
 }
 
