@@ -3,7 +3,7 @@ import { error } from '@sveltejs/kit';
 import { db } from '../db/index.js';
 import { inspections } from '../db/schema.js';
 import { parseId } from '../master/admin.js';
-import { getOperationalDayRange } from '../shift.js';
+import { getCurrentOperationalDayRange, getOperationalDayRange } from '../shift.js';
 import { STAGES } from './types.js';
 
 const PAGE_SIZE_DEFAULT = 25;
@@ -123,10 +123,18 @@ export async function getInspection(id: string) {
 	return row;
 }
 
+/** Jumlah inspeksi NG pada hari operasional berjalan (untuk badge sidebar). */
 export async function countNgInspections() {
+	const { start, end } = getCurrentOperationalDayRange();
 	const [result] = await db
 		.select({ value: count() })
 		.from(inspections)
-		.where(eq(inspections.overallStatus, 'NG'));
+		.where(
+			and(
+				eq(inspections.overallStatus, 'NG'),
+				gte(inspections.inspectedAt, start),
+				lt(inspections.inspectedAt, end)
+			)
+		);
 	return result.value;
 }

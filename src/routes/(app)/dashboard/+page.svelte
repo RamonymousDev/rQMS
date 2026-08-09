@@ -21,6 +21,17 @@
 	import { getShift } from '$lib/shift.js';
 	import type { DashboardStats } from '$lib/server/dashboard.js';
 
+	type InspectionRow = {
+		id: string;
+		partNo: string;
+		lineCode: string;
+		stage: string;
+		shift: string;
+		overallStatus: 'OK' | 'NG';
+		operatorName: string;
+		inspectedAt: string;
+	};
+
 	import MapPinIcon from '@lucide/svelte/icons/map-pin';
 	import ClipboardListIcon from '@lucide/svelte/icons/clipboard-list';
 	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
@@ -31,14 +42,28 @@
 
 	const { data } = $props();
 	const lines = $derived(data?.lines ?? []);
-	const inspections = $derived(data?.inspections ?? []);
-	const stats = $derived<DashboardStats>(
-		data?.stats ?? {
-			totals: { ok: 0, ng: 0, total: 0 },
-			today: { ok: 0, ng: 0, total: 0 },
-			trend: []
+
+	const emptyStats: DashboardStats = {
+		totals: { ok: 0, ng: 0, total: 0 },
+		today: { ok: 0, ng: 0, total: 0 },
+		trend: []
+	};
+	let freshStats: DashboardStats | null = $state(null);
+	const stats = $derived(freshStats ?? data?.stats ?? emptyStats);
+	let freshInspections: InspectionRow[] | null = $state(null);
+	const inspections = $derived(freshInspections ?? data?.inspections ?? []);
+
+	async function refreshDashboard() {
+		try {
+			const res = await fetch('/api/dashboard');
+			if (!res.ok) return;
+			const body = await res.json();
+			if (body.data?.stats) freshStats = body.data.stats;
+			if (body.data?.inspections) freshInspections = body.data.inspections;
+		} catch {
+			// Pertahankan data terakhir jika jaringan bermasalah.
 		}
-	);
+	}
 
 	const okRate = $derived(computeOkRate(stats.today.ok, stats.today.ng));
 
@@ -61,9 +86,11 @@
 	let shift = $derived(getShift(now));
 
 	onMount(() => {
+		void refreshDashboard();
 		const interval = setInterval(() => {
 			now = new Date();
-		}, 60000);
+			void refreshDashboard();
+		}, 30000);
 		return () => clearInterval(interval);
 	});
 
