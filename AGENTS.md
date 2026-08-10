@@ -297,6 +297,7 @@ Setiap request:
 5. Jika di-revoke: `clearSessionCookie`
 6. Body limit: 1 MB untuk non-GET/HEAD
 7. Security headers: `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`
+   (`camera=(self)` diizinkan — QR scanner halaman inspect butuh akses kamera; microphone & geolocation diblokir)
 
 ### Logout
 
