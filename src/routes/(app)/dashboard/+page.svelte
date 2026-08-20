@@ -114,7 +114,7 @@
 	<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 		<Alert.Root>
 			<TriangleAlertIcon class="size-4" />
-			<Alert.Title>Selamat datang di QMS Dashboard</Alert.Title>
+			<Alert.Title>Selamat datang di Q-Jun Dashboard</Alert.Title>
 			<Alert.Description>
 				Pantau status inspeksi dan akses line produksi Anda dari sini.
 			</Alert.Description>

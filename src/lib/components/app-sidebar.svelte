@@ -98,7 +98,7 @@
 <Sidebar.Root {...restProps} bind:ref>
 	<Sidebar.Header>
 		<div class="grid gap-0.5 px-4 py-2">
-			<span class="truncate text-sm font-semibold">QMS</span>
+			<span class="truncate text-sm font-semibold">Q-Jun</span>
 			<span class="truncate text-xs text-muted-foreground">
 				{user.name} · {user.nik}
 			</span>

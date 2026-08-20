@@ -169,7 +169,7 @@
 </script>
 
 <svelte:head>
-	<title>Ringkasan Part · {data.line.name} · QMS</title>
+	<title>Ringkasan Part · {data.line.name} · Q-Jun</title>
 </svelte:head>
 
 <div class={cn('min-h-screen overflow-x-hidden bg-background transition-colors')}>

@@ -53,7 +53,7 @@
 	}
 
 	const breadcrumbs = $derived(getBreadcrumbs());
-	const pageTitle = $derived(getBreadcrumbs().at(-1)?.label ?? 'QMS');
+	const pageTitle = $derived(getBreadcrumbs().at(-1)?.label ?? 'Q-Jun');
 
 	let settingsOpen = $state(false);
 	let changePasswordOpen = $state(false);
@@ -130,7 +130,7 @@
 	}
 </script>
 
-<svelte:head><title>{pageTitle} · QMS</title></svelte:head>
+<svelte:head><title>{pageTitle} · Q-Jun</title></svelte:head>
 
 <svelte:window on:keydown={handleKeydown} />
 
