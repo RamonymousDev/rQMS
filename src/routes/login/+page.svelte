@@ -29,12 +29,12 @@
 			<div class="glass-card rounded-2xl p-8 shadow-2xl backdrop-blur-xl">
 				<div class="flex flex-col items-center gap-6">
 					<div class="flex flex-col items-center gap-3">
-						<img src="/adw.png" alt="ADW" class="logo-glow size-14 object-contain" />
+						<img src="/adw.png" alt="ADW" class="logo-glow size-50 object-contain" />
 						<div class="text-center">
 							<h1
-								class="bg-gradient-to-r from-blue-300 via-white to-blue-300 bg-clip-text text-2xl font-bold tracking-tight text-transparent"
+								class="bg-gradient-to-r from-blue-300 via-white to-blue-300 bg-clip-text text-4xl font-bold tracking-tight text-transparent"
 							>
-								Q-Jun
+								Q-JUN
 							</h1>
 							<p class="mt-1 text-sm text-white/60">Quality Management System</p>
 						</div>
