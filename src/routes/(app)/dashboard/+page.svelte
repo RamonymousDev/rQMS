@@ -13,7 +13,6 @@
 		TableCell
 	} from '$lib/components/ui/table/index.js';
 	import * as Empty from '$lib/components/ui/empty/index.js';
-	import * as Alert from '$lib/components/ui/alert/index.js';
 	import { Progress } from '$lib/components/ui/progress/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import * as Chart from '$lib/components/ui/chart/index.js';
@@ -39,6 +38,7 @@
 	import ClockIcon from '@lucide/svelte/icons/clock';
 	import PieChartIcon from '@lucide/svelte/icons/pie-chart';
 	import ChartColumnIcon from '@lucide/svelte/icons/chart-column';
+	import PlayIcon from '@lucide/svelte/icons/play';
 
 	const { data } = $props();
 	const lines = $derived(data?.lines ?? []);
@@ -108,67 +108,104 @@
 			month: 'short'
 		})
 	);
+
+	const serverShift = $derived(shift);
 </script>
 
 <div class="flex flex-col gap-6">
-	<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-		<Alert.Root>
-			<TriangleAlertIcon class="size-4" />
-			<Alert.Title>Selamat datang di Q-Jun Dashboard</Alert.Title>
-			<Alert.Description>
-				Pantau status inspeksi dan akses line produksi Anda dari sini.
-			</Alert.Description>
-		</Alert.Root>
-		<div class="flex items-center gap-3 text-sm text-muted-foreground">
-			<ClockIcon class="size-4" />
-			<span>{dateString} · {timeString}</span>
-			<Badge variant={shift === 'DAY' ? 'default' : 'secondary'}>Shift {shift}</Badge>
+	<!-- Hero: status shift berjalan + aksi utama -->
+	<div
+		class="flex flex-col gap-4 rounded-2xl bg-card p-5 text-card-foreground shadow-sm ring-1 ring-foreground/10 sm:flex-row sm:items-center sm:justify-between sm:p-6"
+	>
+		<div>
+			<p class="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
+				Shift {serverShift} berjalan
+			</p>
+			<h1 class="mt-1 text-2xl font-bold tracking-tight">Halo, {data?.user?.name ?? 'Operator'}</h1>
+			<p class="mt-1 text-sm text-muted-foreground">
+				{dateString} · {stats.today.total} inspeksi hari ini · OK rate {okRate}%
+			</p>
+		</div>
+		<div class="flex items-center gap-4">
+			<div class="text-right">
+				<p class="text-2xl font-bold tabular-nums">{timeString}</p>
+				<p class="mt-0.5 flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
+					<ClockIcon class="size-3.5" aria-hidden="true" />
+					{dateString} · Shift {shift}
+				</p>
+			</div>
+			<Button href="/inspect" class="h-11 cursor-pointer">
+				<PlayIcon class="size-4" aria-hidden="true" />
+				Mulai Inspeksi
+			</Button>
 		</div>
 	</div>
 
 	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-		<Card.Root>
-			<Card.Header class="flex flex-row items-center justify-between pb-2">
-				<Card.Title class="text-sm font-medium">Accessible Lines</Card.Title>
-				<MapPinIcon class="size-4 text-muted-foreground" />
-			</Card.Header>
-			<Card.Content>
-				<div class="text-2xl font-bold">{lines.length}</div>
-				<p class="text-xs text-muted-foreground">Line yang bisa diakses</p>
+		<Card.Root size="sm">
+			<Card.Content class="flex items-start justify-between gap-3">
+				<div>
+					<p class="text-sm text-muted-foreground">Accessible Lines</p>
+					<p class="mt-1.5 text-2xl leading-none font-bold tabular-nums">{lines.length}</p>
+					<p class="mt-1.5 text-xs text-muted-foreground">Line yang bisa diakses</p>
+				</div>
+				<span
+					class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"
+				>
+					<MapPinIcon class="size-4" aria-hidden="true" />
+				</span>
 			</Card.Content>
 		</Card.Root>
 
-		<Card.Root>
-			<Card.Header class="flex flex-row items-center justify-between pb-2">
-				<Card.Title class="text-sm font-medium">Inspeksi Hari Ini</Card.Title>
-				<ClipboardListIcon class="size-4 text-muted-foreground" />
-			</Card.Header>
-			<Card.Content>
-				<div class="text-2xl font-bold">{stats.today.total}</div>
-				<p class="text-xs text-muted-foreground">Hari operasional berjalan</p>
+		<Card.Root size="sm">
+			<Card.Content class="flex items-start justify-between gap-3">
+				<div>
+					<p class="text-sm text-muted-foreground">Inspeksi Hari Ini</p>
+					<p class="mt-1.5 text-2xl leading-none font-bold tabular-nums">{stats.today.total}</p>
+					<p class="mt-1.5 text-xs text-muted-foreground">Hari operasional berjalan</p>
+				</div>
+				<span
+					class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"
+				>
+					<ClipboardListIcon class="size-4" aria-hidden="true" />
+				</span>
 			</Card.Content>
 		</Card.Root>
 
-		<Card.Root>
-			<Card.Header class="flex flex-row items-center justify-between pb-2">
-				<Card.Title class="text-sm font-medium">OK Hari Ini</Card.Title>
-				<CircleCheckIcon class="size-4 text-green-600 dark:text-green-400" />
-			</Card.Header>
-			<Card.Content>
-				<div class="text-2xl font-bold">{stats.today.ok}</div>
-				<Progress value={okRate} class="mt-2 h-2" />
-				<p class="mt-1 text-xs text-muted-foreground">OK rate {okRate}%</p>
+		<Card.Root size="sm">
+			<Card.Content class="flex items-start justify-between gap-3">
+				<div class="min-w-0 flex-1">
+					<p class="text-sm text-muted-foreground">OK Hari Ini</p>
+					<p
+						class="mt-1.5 text-2xl leading-none font-bold text-green-700 tabular-nums dark:text-green-400"
+					>
+						{stats.today.ok}
+					</p>
+					<Progress value={okRate} class="mt-2" />
+					<p class="mt-1.5 text-xs text-muted-foreground">OK rate {okRate}%</p>
+				</div>
+				<span
+					class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-green-600/10 text-green-700 dark:text-green-400"
+				>
+					<CircleCheckIcon class="size-4" aria-hidden="true" />
+				</span>
 			</Card.Content>
 		</Card.Root>
 
-		<Card.Root>
-			<Card.Header class="flex flex-row items-center justify-between pb-2">
-				<Card.Title class="text-sm font-medium">NG Hari Ini</Card.Title>
-				<TriangleAlertIcon class="size-4 text-destructive" />
-			</Card.Header>
-			<Card.Content>
-				<div class="text-2xl font-bold">{stats.today.ng}</div>
-				<p class="text-xs text-muted-foreground">Perlu perhatian</p>
+		<Card.Root size="sm">
+			<Card.Content class="flex items-start justify-between gap-3">
+				<div>
+					<p class="text-sm text-muted-foreground">NG Hari Ini</p>
+					<p class="mt-1.5 text-2xl leading-none font-bold text-destructive tabular-nums">
+						{stats.today.ng}
+					</p>
+					<p class="mt-1.5 text-xs text-muted-foreground">Perlu perhatian</p>
+				</div>
+				<span
+					class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive"
+				>
+					<TriangleAlertIcon class="size-4" aria-hidden="true" />
+				</span>
 			</Card.Content>
 		</Card.Root>
 	</div>
@@ -261,7 +298,7 @@
 					</Empty.Header>
 				</Empty.Root>
 			{:else}
-				<div class="rounded-md border">
+				<div class="overflow-hidden rounded-xl border">
 					<Table>
 						<TableHeader>
 							<TableRow>
@@ -273,7 +310,7 @@
 						</TableHeader>
 						<TableBody>
 							{#each lines as line (line.id)}
-								<TableRow>
+								<TableRow class="transition-colors hover:bg-muted/50">
 									<TableCell class="font-medium">{line.process?.name ?? '-'}</TableCell>
 									<TableCell>
 										<Badge variant="secondary">{line.code}</Badge>

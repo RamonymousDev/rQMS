@@ -6,20 +6,18 @@
 	import TrashIcon from '@lucide/svelte/icons/trash-2';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import {
-		Card,
-		CardAction,
-		CardContent,
-		CardDescription,
-		CardHeader,
-		CardTitle
-	} from '$lib/components/ui/card/index.js';
+	import { Card, CardContent } from '$lib/components/ui/card/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import Combobox from '$lib/components/combobox.svelte';
+	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
+	import PageHeader from '$lib/components/page-header.svelte';
+	import EmptyState from '$lib/components/empty-state.svelte';
+	import SearchIcon from '@lucide/svelte/icons/search';
+	import InboxIcon from '@lucide/svelte/icons/inbox';
 
 	type Option = { value: string; label: string };
 	type ConfigRow = {
@@ -262,26 +260,35 @@
 	}
 </script>
 
+<PageHeader
+	title="Konfigurasi Part + Line"
+	description="Menentukan item inspeksi beserta standard-nya untuk tiap kombinasi Part dan Line."
+>
+	{#snippet actions()}
+		<Button onclick={openCreate} class="cursor-pointer">
+			<PlusIcon class="size-4" />
+			Tambah
+		</Button>
+	{/snippet}
+</PageHeader>
+
 <Card>
-	<CardHeader>
-		<CardTitle>Konfigurasi Part + Line</CardTitle>
-		<CardDescription>
-			Menentukan item inspeksi beserta standard-nya untuk tiap kombinasi Part dan Line.
-		</CardDescription>
-		<CardAction>
-			<Button onclick={openCreate}>
-				<PlusIcon class="size-4" />
-				Tambah
-			</Button>
-		</CardAction>
-	</CardHeader>
 	<CardContent class="grid gap-4">
-		<Input
-			type="search"
-			placeholder="Cari part no / line code..."
-			class="max-w-xs"
-			bind:value={search}
-		/>
+		<div class="flex flex-wrap items-center justify-between gap-2">
+			<div class="relative w-full max-w-xs">
+				<SearchIcon
+					class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+					aria-hidden="true"
+				/>
+				<Input
+					type="search"
+					placeholder="Cari part no / line code..."
+					class="pl-9"
+					bind:value={search}
+				/>
+			</div>
+			<span class="text-sm text-muted-foreground">{filtered.length} dari {rows.length} data</span>
+		</div>
 		<Table.Root>
 			<Table.Header>
 				<Table.Row>
@@ -293,41 +300,64 @@
 				</Table.Row>
 			</Table.Header>
 			<Table.Body>
-				{#each filtered as row (row.id)}
-					<Table.Row>
-						<Table.Cell>{row.part?.partNo ?? '-'}</Table.Cell>
-						<Table.Cell>{row.line?.code ?? '-'}</Table.Cell>
-						<Table.Cell class="text-muted-foreground">{summaryOf(row)}</Table.Cell>
-						<Table.Cell>
-							<Badge variant={row.isActive ? 'default' : 'secondary'}>
-								{row.isActive ? 'AKTIF' : 'NONAKTIF'}
-							</Badge>
-						</Table.Cell>
-						<Table.Cell class="text-end">
-							<div class="flex items-center justify-end gap-2">
-								<Switch
-									checked={row.isActive}
-									onCheckedChange={() => toggleActive(row)}
-									aria-label="Toggle aktif"
-								/>
-								<Button
-									variant="outline"
-									size="icon-sm"
-									onclick={() => openEdit(row)}
-									aria-label="Edit"
-								>
-									<PencilIcon class="size-4" />
-								</Button>
-							</div>
-						</Table.Cell>
-					</Table.Row>
+				{#if loading}
+					{#each [0, 1, 2, 3, 4] as i (i)}
+						<Table.Row>
+							<Table.Cell colspan={5}>
+								<Skeleton class="h-10 w-full" />
+							</Table.Cell>
+						</Table.Row>
+					{/each}
 				{:else}
-					<Table.Row>
-						<Table.Cell colspan={5} class="h-24 text-center text-muted-foreground">
-							{loading ? 'Memuat data...' : 'Belum ada konfigurasi.'}
-						</Table.Cell>
-					</Table.Row>
-				{/each}
+					{#each filtered as row (row.id)}
+						<Table.Row class="transition-colors hover:bg-muted/50">
+							<Table.Cell>{row.part?.partNo ?? '-'}</Table.Cell>
+							<Table.Cell>{row.line?.code ?? '-'}</Table.Cell>
+							<Table.Cell class="text-muted-foreground">{summaryOf(row)}</Table.Cell>
+							<Table.Cell>
+								<Badge variant={row.isActive ? 'default' : 'secondary'}>
+									{row.isActive ? 'Aktif' : 'Nonaktif'}
+								</Badge>
+							</Table.Cell>
+							<Table.Cell class="text-end">
+								<div class="flex items-center justify-end gap-2">
+									<Switch
+										checked={row.isActive}
+										onCheckedChange={() => toggleActive(row)}
+										aria-label="Toggle aktif"
+									/>
+									<Button
+										variant="ghost"
+										size="icon-sm"
+										onclick={() => openEdit(row)}
+										aria-label="Edit"
+									>
+										<PencilIcon class="size-4" />
+									</Button>
+								</div>
+							</Table.Cell>
+						</Table.Row>
+					{:else}
+						<Table.Row>
+							<Table.Cell colspan={5} class="p-0">
+								<div class="p-4">
+									<EmptyState
+										icon={InboxIcon}
+										title="Belum ada konfigurasi"
+										description="Tambahkan konfigurasi Part + Line untuk menentukan item inspeksi."
+									>
+										{#snippet action()}
+											<Button size="sm" onclick={openCreate}>
+												<PlusIcon class="size-4" />
+												Tambah
+											</Button>
+										{/snippet}
+									</EmptyState>
+								</div>
+							</Table.Cell>
+						</Table.Row>
+					{/each}
+				{/if}
 			</Table.Body>
 		</Table.Root>
 	</CardContent>

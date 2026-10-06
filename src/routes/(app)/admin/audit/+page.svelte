@@ -3,19 +3,18 @@
 	import { toast } from 'svelte-sonner';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import {
-		Card,
-		CardContent,
-		CardDescription,
-		CardHeader,
-		CardTitle
-	} from '$lib/components/ui/card/index.js';
+	import { Card, CardContent } from '$lib/components/ui/card/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import DatePicker from '$lib/components/date-picker.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
+	import PageHeader from '$lib/components/page-header.svelte';
+	import EmptyState from '$lib/components/empty-state.svelte';
+	import PaginationFooter from '$lib/components/pagination-footer.svelte';
+	import InboxIcon from '@lucide/svelte/icons/inbox';
+	import { formatDateTime } from '$lib/format.js';
 
 	type AuditRow = {
 		id: string;
@@ -95,87 +94,79 @@
 		detailOpen = true;
 	}
 
-	/** Timestamp disimpan UTC; tampilkan dalam waktu Jakarta. */
-	function formatDateTime(value: string): string {
-		return new Date(value).toLocaleString('id-ID', {
-			timeZone: 'Asia/Jakarta',
-			dateStyle: 'short',
-			timeStyle: 'short'
-		});
-	}
-
 	onMount(() => {
 		load(1);
 	});
 </script>
 
-<Card>
-	<CardHeader>
-		<CardTitle>Audit Log</CardTitle>
-		<CardDescription>
-			Jejak aktivitas pengguna (login, perubahan master data, inspeksi, konfigurasi). Bersifat
-			append-only.
-		</CardDescription>
-	</CardHeader>
+<PageHeader
+	title="Audit Log"
+	description="Jejak aktivitas pengguna (login, perubahan master data, inspeksi, konfigurasi). Bersifat append-only."
+/>
 
+<Card>
 	<CardContent class="grid gap-4">
 		<!-- Filters -->
-		<div class="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
-			<div class="grid gap-1.5">
-				<Label for="filterAction">Aksi</Label>
-				<Input
-					id="filterAction"
-					placeholder="contoh: login_success"
-					bind:value={filterAction}
-					onkeydown={(e) => {
-						if (e.key === 'Enter') {
-							e.preventDefault();
-							runSearch();
-						}
-					}}
-				/>
+		<div class="grid gap-4 rounded-xl bg-muted/40 p-4 ring-1 ring-foreground/5">
+			<div class="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
+				<div class="grid gap-1.5">
+					<Label for="filterAction">Aksi</Label>
+					<Input
+						id="filterAction"
+						placeholder="contoh: login_success"
+						bind:value={filterAction}
+						onkeydown={(e) => {
+							if (e.key === 'Enter') {
+								e.preventDefault();
+								runSearch();
+							}
+						}}
+					/>
+				</div>
+				<div class="grid gap-1.5">
+					<Label for="filterEntity">Entity</Label>
+					<Input
+						id="filterEntity"
+						placeholder="contoh: part"
+						bind:value={filterEntity}
+						onkeydown={(e) => {
+							if (e.key === 'Enter') {
+								e.preventDefault();
+								runSearch();
+							}
+						}}
+					/>
+				</div>
+				<div class="grid gap-1.5">
+					<Label for="filterActorNik">NIK Aktor</Label>
+					<Input
+						id="filterActorNik"
+						placeholder="contoh: ADMIN001"
+						bind:value={filterActorNik}
+						onkeydown={(e) => {
+							if (e.key === 'Enter') {
+								e.preventDefault();
+								runSearch();
+							}
+						}}
+					/>
+				</div>
+				<div class="grid gap-1.5">
+					<Label>Dari Tanggal</Label>
+					<DatePicker bind:value={filterDateFrom} clearable placeholder="Dari tanggal" />
+					<p class="text-[10px] text-muted-foreground">Hari kalender WIB</p>
+				</div>
+				<div class="grid gap-1.5">
+					<Label>Sampai Tanggal</Label>
+					<DatePicker bind:value={filterDateTo} clearable placeholder="Sampai tanggal" />
+					<p class="text-[10px] text-muted-foreground">Hari kalender WIB</p>
+				</div>
 			</div>
-			<div class="grid gap-1.5">
-				<Label for="filterEntity">Entity</Label>
-				<Input
-					id="filterEntity"
-					placeholder="contoh: part"
-					bind:value={filterEntity}
-					onkeydown={(e) => {
-						if (e.key === 'Enter') {
-							e.preventDefault();
-							runSearch();
-						}
-					}}
-				/>
-			</div>
-			<div class="grid gap-1.5">
-				<Label for="filterActorNik">NIK Aktor</Label>
-				<Input
-					id="filterActorNik"
-					placeholder="contoh: ADMIN001"
-					bind:value={filterActorNik}
-					onkeydown={(e) => {
-						if (e.key === 'Enter') {
-							e.preventDefault();
-							runSearch();
-						}
-					}}
-				/>
-			</div>
-			<div class="grid gap-1.5">
-				<Label>Dari Tanggal</Label>
-				<DatePicker bind:value={filterDateFrom} clearable placeholder="Dari tanggal" />
-			</div>
-			<div class="grid gap-1.5">
-				<Label>Sampai Tanggal</Label>
-				<DatePicker bind:value={filterDateTo} clearable placeholder="Sampai tanggal" />
-			</div>
-		</div>
 
-		<div class="flex flex-wrap items-center gap-2">
-			<Button size="sm" onclick={() => runSearch()}>Cari</Button>
-			<Button variant="outline" size="sm" onclick={resetFilters}>Reset</Button>
+			<div class="flex flex-wrap items-center gap-2">
+				<Button size="sm" onclick={() => runSearch()}>Cari</Button>
+				<Button variant="outline" size="sm" onclick={resetFilters}>Reset</Button>
+			</div>
 		</div>
 
 		<!-- Table -->
@@ -192,7 +183,7 @@
 			</Table.Header>
 			<Table.Body>
 				{#each rows as row (row.id)}
-					<Table.Row>
+					<Table.Row class="transition-colors hover:bg-muted/50">
 						<Table.Cell>{formatDateTime(row.createdAt)}</Table.Cell>
 						<Table.Cell>
 							<span class="font-mono font-medium">{row.actorNik ?? '-'}</span>
@@ -212,7 +203,7 @@
 						</Table.Cell>
 						<Table.Cell class="text-end font-mono text-xs">{row.ipAddress ?? '-'}</Table.Cell>
 						<Table.Cell class="text-end">
-							<Button variant="outline" size="sm" onclick={() => openDetail(row)}>Detail</Button>
+							<Button variant="ghost" size="sm" onclick={() => openDetail(row)}>Detail</Button>
 						</Table.Cell>
 					</Table.Row>
 				{:else}
@@ -226,8 +217,14 @@
 						{/each}
 					{:else}
 						<Table.Row>
-							<Table.Cell colspan={6} class="h-24 text-center text-muted-foreground">
-								Belum ada audit log.
+							<Table.Cell colspan={6} class="p-0">
+								<div class="p-4">
+									<EmptyState
+										icon={InboxIcon}
+										title="Belum ada audit log"
+										description="Aktivitas pengguna akan tercatat di sini secara otomatis."
+									/>
+								</div>
 							</Table.Cell>
 						</Table.Row>
 					{/if}
@@ -235,30 +232,15 @@
 			</Table.Body>
 		</Table.Root>
 
-		<div class="flex items-center justify-between">
-			<span class="text-sm text-muted-foreground">
-				{total} entri · Halaman {page} dari {totalPages}
-				{#if loading}<span class="ms-1">· Memuat…</span>{/if}
-			</span>
-			<div class="flex gap-2">
-				<Button
-					variant="outline"
-					size="sm"
-					disabled={page <= 1 || loading}
-					onclick={() => runSearch(page - 1)}
-				>
-					Sebelumnya
-				</Button>
-				<Button
-					variant="outline"
-					size="sm"
-					disabled={page >= totalPages || loading}
-					onclick={() => runSearch(page + 1)}
-				>
-					Berikutnya
-				</Button>
-			</div>
-		</div>
+		<PaginationFooter
+			{total}
+			{page}
+			{totalPages}
+			{loading}
+			unit="entri"
+			onPrev={() => runSearch(page - 1)}
+			onNext={() => runSearch(page + 1)}
+		/>
 	</CardContent>
 </Card>
 

@@ -5,21 +5,19 @@
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import {
-		Card,
-		CardAction,
-		CardContent,
-		CardDescription,
-		CardHeader,
-		CardTitle
-	} from '$lib/components/ui/card/index.js';
+	import { Card, CardContent } from '$lib/components/ui/card/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
+	import PageHeader from '$lib/components/page-header.svelte';
+	import EmptyState from '$lib/components/empty-state.svelte';
+	import SearchIcon from '@lucide/svelte/icons/search';
+	import InboxIcon from '@lucide/svelte/icons/inbox';
 
 	export interface CrudField {
 		name: string;
@@ -221,22 +219,30 @@
 	}
 </script>
 
+<PageHeader {title} {description}>
+	{#snippet actions()}
+		<Button onclick={openCreate} class="cursor-pointer">
+			<PlusIcon class="size-4" />
+			Tambah
+		</Button>
+	{/snippet}
+</PageHeader>
+
 <Card>
-	<CardHeader>
-		<CardTitle>{title}</CardTitle>
-		{#if description}
-			<CardDescription>{description}</CardDescription>
-		{/if}
-		<CardAction>
-			<Button onclick={openCreate}>
-				<PlusIcon class="size-4" />
-				Tambah
-			</Button>
-		</CardAction>
-	</CardHeader>
 	<CardContent class="grid gap-4">
 		{#if searchKeys.length}
-			<Input type="search" placeholder="Cari..." class="max-w-xs" bind:value={search} />
+			<div class="flex flex-wrap items-center justify-between gap-2">
+				<div class="relative w-full max-w-xs">
+					<SearchIcon
+						class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+						aria-hidden="true"
+					/>
+					<Input type="search" placeholder="Cari..." class="pl-9" bind:value={search} />
+				</div>
+				<span class="text-sm text-muted-foreground">
+					{filtered.length} dari {rows.length} data
+				</span>
+			</div>
 		{/if}
 		<Table.Root>
 			<Table.Header>
@@ -248,46 +254,69 @@
 				</Table.Row>
 			</Table.Header>
 			<Table.Body>
-				{#each filtered as row (row.id)}
-					<Table.Row>
-						{#each columns as col (col.key)}
-							<Table.Cell>
-								{#if col.badge}
-									<Badge variant={row[col.key] ? 'default' : 'secondary'}>
-										{row[col.key] ? 'AKTIF' : 'NONAKTIF'}
-									</Badge>
-								{:else if col.render}
-									{col.render(row)}
-								{:else}
-									{row[col.key] ?? '-'}
-								{/if}
+				{#if loading}
+					{#each [0, 1, 2, 3, 4] as i (i)}
+						<Table.Row>
+							<Table.Cell colspan={columns.length + 1}>
+								<Skeleton class="h-10 w-full" />
 							</Table.Cell>
-						{/each}
-						<Table.Cell class="text-end">
-							<div class="flex items-center justify-end gap-2">
-								<Switch
-									checked={row.isActive}
-									onCheckedChange={() => toggleActive(row)}
-									aria-label="Toggle aktif"
-								/>
-								<Button
-									variant="outline"
-									size="icon-sm"
-									onclick={() => openEdit(row)}
-									aria-label="Edit"
-								>
-									<PencilIcon class="size-4" />
-								</Button>
-							</div>
-						</Table.Cell>
-					</Table.Row>
+						</Table.Row>
+					{/each}
 				{:else}
-					<Table.Row>
-						<Table.Cell colspan={columns.length + 1} class="h-24 text-center text-muted-foreground">
-							{loading ? 'Memuat data...' : 'Belum ada data.'}
-						</Table.Cell>
-					</Table.Row>
-				{/each}
+					{#each filtered as row (row.id)}
+						<Table.Row class="transition-colors hover:bg-muted/50">
+							{#each columns as col (col.key)}
+								<Table.Cell>
+									{#if col.badge}
+										<Badge variant={row[col.key] ? 'default' : 'secondary'}>
+											{row[col.key] ? 'Aktif' : 'Nonaktif'}
+										</Badge>
+									{:else if col.render}
+										{col.render(row)}
+									{:else}
+										{row[col.key] ?? '-'}
+									{/if}
+								</Table.Cell>
+							{/each}
+							<Table.Cell class="text-end">
+								<div class="flex items-center justify-end gap-2">
+									<Switch
+										checked={row.isActive}
+										onCheckedChange={() => toggleActive(row)}
+										aria-label="Toggle aktif"
+									/>
+									<Button
+										variant="ghost"
+										size="icon-sm"
+										onclick={() => openEdit(row)}
+										aria-label="Edit"
+									>
+										<PencilIcon class="size-4" />
+									</Button>
+								</div>
+							</Table.Cell>
+						</Table.Row>
+					{:else}
+						<Table.Row>
+							<Table.Cell colspan={columns.length + 1} class="p-0">
+								<div class="p-4">
+									<EmptyState
+										icon={InboxIcon}
+										title="Belum ada data"
+										description="Data akan muncul di sini setelah ditambahkan."
+									>
+										{#snippet action()}
+											<Button size="sm" onclick={openCreate}>
+												<PlusIcon class="size-4" />
+												Tambah {title}
+											</Button>
+										{/snippet}
+									</EmptyState>
+								</div>
+							</Table.Cell>
+						</Table.Row>
+					{/each}
+				{/if}
 			</Table.Body>
 		</Table.Root>
 	</CardContent>
@@ -323,7 +352,7 @@
 								</Select.Content>
 							</Select.Root>
 						{:else if field.type === 'checkbox-group'}
-							<div class="grid max-h-44 gap-2 overflow-y-auto border-b pb-3">
+							<div class="grid max-h-44 gap-2 overflow-y-auto rounded-md border p-3">
 								{#each optionMap[field.name] ?? field.options ?? [] as option (option.value)}
 									<div class="flex items-center gap-2">
 										<Checkbox

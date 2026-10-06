@@ -83,8 +83,25 @@
 			toast.error('Password baru tidak cocok.');
 			return;
 		}
-		if (newPassword.length < 6) {
-			toast.error('Password baru minimal 6 karakter.');
+		// Selaras dengan validatePasswordStrength() di server (src/lib/server/password.ts).
+		if (newPassword.length < 8) {
+			toast.error('Password baru minimal 8 karakter.');
+			return;
+		}
+		if (!/[A-Z]/.test(newPassword)) {
+			toast.error('Password baru wajib mengandung huruf besar.');
+			return;
+		}
+		if (!/[a-z]/.test(newPassword)) {
+			toast.error('Password baru wajib mengandung huruf kecil.');
+			return;
+		}
+		if (!/\d/.test(newPassword)) {
+			toast.error('Password baru wajib mengandung angka.');
+			return;
+		}
+		if (!/[^A-Za-z0-9]/.test(newPassword)) {
+			toast.error('Password baru wajib mengandung simbol.');
 			return;
 		}
 
@@ -139,9 +156,12 @@
 		user={data.user}
 		permissionCodes={data.permissionCodes}
 		ngInspectionCount={data.ngInspectionCount}
+		onLogout={openLogoutConfirm}
 	/>
 	<Sidebar.Inset>
-		<header class="flex h-16 shrink-0 items-center gap-2 border-b px-4">
+		<header
+			class="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b bg-background/80 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-background/70"
+		>
 			<Sidebar.Trigger class="-ms-1" />
 			<Separator orientation="vertical" class="me-2 h-4" />
 			<Breadcrumb.Root>
@@ -162,7 +182,6 @@
 				</Breadcrumb.List>
 			</Breadcrumb.Root>
 			<div class="ms-auto flex items-center gap-2">
-				<span class="text-sm font-medium">{data.user.nik}</span>
 				<DropdownMenu.Root bind:open={settingsOpen}>
 					<DropdownMenu.Trigger>
 						<div
@@ -191,7 +210,7 @@
 				</DropdownMenu.Root>
 			</div>
 		</header>
-		<div class="flex flex-1 flex-col gap-4 p-4">
+		<div class="mx-auto flex w-full max-w-[1400px] flex-1 flex-col gap-5 p-4 lg:p-6">
 			{@render children()}
 		</div>
 	</Sidebar.Inset>
@@ -223,6 +242,9 @@
 					bind:value={newPassword}
 					autocomplete="new-password"
 				/>
+				<p class="text-xs text-muted-foreground">
+					Min. 8 karakter, huruf besar, huruf kecil, angka, dan simbol.
+				</p>
 			</div>
 			<div class="grid gap-2">
 				<Label for="confirmPassword">Konfirmasi Password Baru</Label>

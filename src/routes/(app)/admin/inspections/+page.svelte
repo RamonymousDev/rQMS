@@ -5,13 +5,7 @@
 	import { resolve } from '$app/paths';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import {
-		Card,
-		CardContent,
-		CardDescription,
-		CardHeader,
-		CardTitle
-	} from '$lib/components/ui/card/index.js';
+	import { Card, CardContent } from '$lib/components/ui/card/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
@@ -24,6 +18,12 @@
 		SelectTrigger
 	} from '$lib/components/ui/select/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
+	import PageHeader from '$lib/components/page-header.svelte';
+	import EmptyState from '$lib/components/empty-state.svelte';
+	import PaginationFooter from '$lib/components/pagination-footer.svelte';
+	import SearchIcon from '@lucide/svelte/icons/search';
+	import InboxIcon from '@lucide/svelte/icons/inbox';
+	import { formatDateTime } from '$lib/format.js';
 	import DownloadIcon from '@lucide/svelte/icons/download';
 
 	type InspectionRow = {
@@ -253,15 +253,6 @@
 		}
 	}
 
-	/** Timestamp disimpan UTC; tampilkan dalam waktu Jakarta. */
-	function formatDateTime(value: string): string {
-		return new Date(value).toLocaleString('id-ID', {
-			timeZone: 'Asia/Jakarta',
-			dateStyle: 'short',
-			timeStyle: 'short'
-		});
-	}
-
 	const stageOptions = [
 		{ value: '', label: 'Semua Stage' },
 		{ value: 'START', label: 'Start' },
@@ -280,141 +271,152 @@
 	];
 </script>
 
+<PageHeader
+	title="Hasil Inspeksi"
+	description="Riwayat inspeksi beserta seluruh snapshot nilai saat pemeriksaan dilakukan."
+>
+	{#snippet actions()}
+		<Button variant="outline" size="sm" onclick={exportExcel} disabled={exporting}>
+			<DownloadIcon class="size-4" />
+			Export Excel
+		</Button>
+		<Button variant={showNgOnly ? 'destructive' : 'outline'} size="sm" onclick={toggleNgOnly}>
+			{showNgOnly ? 'Semua' : 'Hanya NG'}
+		</Button>
+	{/snippet}
+</PageHeader>
+
+<!-- Summary Stats (total global sesuai filter) -->
+<div class="grid grid-cols-3 gap-3">
+	<div class="rounded-lg border bg-muted/30 px-3 py-2 text-center">
+		<p class="text-2xl font-bold">{total}</p>
+		<p class="text-xs text-muted-foreground">Total</p>
+	</div>
+	<div class="rounded-lg border bg-green-50 px-3 py-2 text-center dark:bg-green-950/30">
+		<p class="text-2xl font-bold text-green-700 dark:text-green-400">{okCount}</p>
+		<p class="text-xs text-green-600 dark:text-green-400">OK</p>
+	</div>
+	<div class="rounded-lg border bg-red-50 px-3 py-2 text-center dark:bg-red-950/30">
+		<p class="text-2xl font-bold text-red-700 dark:text-red-400">{ngCount}</p>
+		<p class="text-xs text-red-600 dark:text-red-400">NG</p>
+	</div>
+</div>
+
 <Card>
-	<CardHeader>
-		<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-			<div>
-				<CardTitle>Hasil Inspeksi</CardTitle>
-				<CardDescription>
-					Riwayat inspeksi beserta seluruh snapshot nilai saat pemeriksaan dilakukan.
-				</CardDescription>
-			</div>
-			<div class="flex items-center gap-2">
-				<Button variant="outline" size="sm" onclick={exportExcel} disabled={exporting}>
-					<DownloadIcon class="size-4" />
-					Export Excel
-				</Button>
-				<Button variant={showNgOnly ? 'destructive' : 'outline'} size="sm" onclick={toggleNgOnly}>
-					{showNgOnly ? 'Semua' : 'Hanya NG'}
-				</Button>
-			</div>
-		</div>
-
-		<!-- Summary Stats (total global sesuai filter) -->
-		<div class="grid grid-cols-3 gap-3 pt-2">
-			<div class="rounded-lg border bg-muted/30 px-3 py-2 text-center">
-				<p class="text-2xl font-bold">{total}</p>
-				<p class="text-xs text-muted-foreground">Total</p>
-			</div>
-			<div class="rounded-lg border bg-green-50 px-3 py-2 text-center dark:bg-green-950/30">
-				<p class="text-2xl font-bold text-green-700 dark:text-green-400">{okCount}</p>
-				<p class="text-xs text-green-600 dark:text-green-400">OK</p>
-			</div>
-			<div class="rounded-lg border bg-red-50 px-3 py-2 text-center dark:bg-red-950/30">
-				<p class="text-2xl font-bold text-red-700 dark:text-red-400">{ngCount}</p>
-				<p class="text-xs text-red-600 dark:text-red-400">NG</p>
-			</div>
-		</div>
-	</CardHeader>
-
 	<CardContent class="grid gap-4">
 		<!-- Filters -->
-		<div class="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-			<div class="grid gap-1.5">
-				<Label for="filterPartNo">Part No</Label>
-				<Input
-					id="filterPartNo"
-					placeholder="contoh: 64300"
-					bind:value={filterPartNo}
-					onkeydown={(e) => {
-						if (e.key === 'Enter') {
-							e.preventDefault();
-							runSearch();
-						}
-					}}
-				/>
+		<div class="grid gap-4 rounded-xl bg-muted/40 p-4 ring-1 ring-foreground/5">
+			<div class="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+				<div class="grid gap-1.5">
+					<Label for="filterPartNo">Part No</Label>
+					<div class="relative">
+						<SearchIcon
+							class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+							aria-hidden="true"
+						/>
+						<Input
+							id="filterPartNo"
+							placeholder="contoh: 64300"
+							class="pl-9"
+							bind:value={filterPartNo}
+							onkeydown={(e) => {
+								if (e.key === 'Enter') {
+									e.preventDefault();
+									runSearch();
+								}
+							}}
+						/>
+					</div>
+				</div>
+				<div class="grid gap-1.5">
+					<Label for="filterLineCode">Line Code</Label>
+					<div class="relative">
+						<SearchIcon
+							class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+							aria-hidden="true"
+						/>
+						<Input
+							id="filterLineCode"
+							placeholder="contoh: RSW"
+							class="pl-9"
+							bind:value={filterLineCode}
+							onkeydown={(e) => {
+								if (e.key === 'Enter') {
+									e.preventDefault();
+									runSearch();
+								}
+							}}
+						/>
+					</div>
+				</div>
+				<div class="grid gap-1.5">
+					<Label>Dari Tanggal</Label>
+					<DatePicker bind:value={filterDateFrom} clearable placeholder="Dari tanggal" />
+					<p class="text-[10px] text-muted-foreground">Tanggal operasional (07:30–07:30 WIB)</p>
+				</div>
+				<div class="grid gap-1.5">
+					<Label>Sampai Tanggal</Label>
+					<DatePicker bind:value={filterDateTo} clearable placeholder="Sampai tanggal" />
+					<p class="text-[10px] text-muted-foreground">Tanggal operasional (07:30–07:30 WIB)</p>
+				</div>
 			</div>
-			<div class="grid gap-1.5">
-				<Label for="filterLineCode">Line Code</Label>
-				<Input
-					id="filterLineCode"
-					placeholder="contoh: RSW"
-					bind:value={filterLineCode}
-					onkeydown={(e) => {
-						if (e.key === 'Enter') {
-							e.preventDefault();
-							runSearch();
-						}
-					}}
-				/>
-			</div>
-			<div class="grid gap-1.5">
-				<Label>Dari Tanggal</Label>
-				<DatePicker bind:value={filterDateFrom} clearable placeholder="Dari tanggal" />
-				<p class="text-[10px] text-muted-foreground">Tanggal operasional (07:30–07:30 WIB)</p>
-			</div>
-			<div class="grid gap-1.5">
-				<Label>Sampai Tanggal</Label>
-				<DatePicker bind:value={filterDateTo} clearable placeholder="Sampai tanggal" />
-				<p class="text-[10px] text-muted-foreground">Tanggal operasional (07:30–07:30 WIB)</p>
-			</div>
-		</div>
 
-		<div class="flex flex-wrap items-center gap-2">
-			<div class="grid gap-1.5">
-				<Label>Stage</Label>
-				<Select type="single" bind:value={filterStage}>
-					<SelectTrigger class="w-[140px]">
-						{#if filterStage}
-							<span>{stageOptions.find((o) => o.value === filterStage)?.label}</span>
-						{:else}
-							<span class="text-muted-foreground">Semua Stage</span>
-						{/if}
-					</SelectTrigger>
-					<SelectContent>
-						{#each stageOptions as opt (opt.value)}
-							<SelectItem value={opt.value}>{opt.label}</SelectItem>
-						{/each}
-					</SelectContent>
-				</Select>
-			</div>
-			<div class="grid gap-1.5">
-				<Label>Shift</Label>
-				<Select type="single" bind:value={filterShift}>
-					<SelectTrigger class="w-[140px]">
-						{#if filterShift}
-							<span>{shiftOptions.find((o) => o.value === filterShift)?.label}</span>
-						{:else}
-							<span class="text-muted-foreground">Semua Shift</span>
-						{/if}
-					</SelectTrigger>
-					<SelectContent>
-						{#each shiftOptions as opt (opt.value)}
-							<SelectItem value={opt.value}>{opt.label}</SelectItem>
-						{/each}
-					</SelectContent>
-				</Select>
-			</div>
-			<div class="grid gap-1.5">
-				<Label>Status</Label>
-				<Select type="single" bind:value={filterStatus}>
-					<SelectTrigger class="w-[140px]">
-						{#if filterStatus}
-							<span>{statusOptions.find((o) => o.value === filterStatus)?.label}</span>
-						{:else}
-							<span class="text-muted-foreground">Semua Status</span>
-						{/if}
-					</SelectTrigger>
-					<SelectContent>
-						{#each statusOptions as opt (opt.value)}
-							<SelectItem value={opt.value}>{opt.label}</SelectItem>
-						{/each}
-					</SelectContent>
-				</Select>
-			</div>
-			<div class="ms-auto flex items-end gap-2">
-				<Button size="sm" onclick={() => runSearch()}>Cari</Button>
-				<Button variant="outline" size="sm" onclick={resetFilters}>Reset</Button>
+			<div class="flex flex-wrap items-center gap-2">
+				<div class="grid gap-1.5">
+					<Label>Stage</Label>
+					<Select type="single" bind:value={filterStage}>
+						<SelectTrigger class="w-[140px]">
+							{#if filterStage}
+								<span>{stageOptions.find((o) => o.value === filterStage)?.label}</span>
+							{:else}
+								<span class="text-muted-foreground">Semua Stage</span>
+							{/if}
+						</SelectTrigger>
+						<SelectContent>
+							{#each stageOptions as opt (opt.value)}
+								<SelectItem value={opt.value}>{opt.label}</SelectItem>
+							{/each}
+						</SelectContent>
+					</Select>
+				</div>
+				<div class="grid gap-1.5">
+					<Label>Shift</Label>
+					<Select type="single" bind:value={filterShift}>
+						<SelectTrigger class="w-[140px]">
+							{#if filterShift}
+								<span>{shiftOptions.find((o) => o.value === filterShift)?.label}</span>
+							{:else}
+								<span class="text-muted-foreground">Semua Shift</span>
+							{/if}
+						</SelectTrigger>
+						<SelectContent>
+							{#each shiftOptions as opt (opt.value)}
+								<SelectItem value={opt.value}>{opt.label}</SelectItem>
+							{/each}
+						</SelectContent>
+					</Select>
+				</div>
+				<div class="grid gap-1.5">
+					<Label>Status</Label>
+					<Select type="single" bind:value={filterStatus}>
+						<SelectTrigger class="w-[140px]">
+							{#if filterStatus}
+								<span>{statusOptions.find((o) => o.value === filterStatus)?.label}</span>
+							{:else}
+								<span class="text-muted-foreground">Semua Status</span>
+							{/if}
+						</SelectTrigger>
+						<SelectContent>
+							{#each statusOptions as opt (opt.value)}
+								<SelectItem value={opt.value}>{opt.label}</SelectItem>
+							{/each}
+						</SelectContent>
+					</Select>
+				</div>
+				<div class="ms-auto flex items-end gap-2">
+					<Button size="sm" onclick={() => runSearch()}>Cari</Button>
+					<Button variant="outline" size="sm" onclick={resetFilters}>Reset</Button>
+				</div>
 			</div>
 		</div>
 
@@ -434,7 +436,11 @@
 			</Table.Header>
 			<Table.Body>
 				{#each rows as row (row.id)}
-					<Table.Row class={row.overallStatus === 'NG' ? 'bg-red-50/50 dark:bg-red-950/20' : ''}>
+					<Table.Row
+						class={row.overallStatus === 'NG'
+							? 'bg-red-50/50 transition-colors hover:bg-red-50 dark:bg-red-950/20 dark:hover:bg-red-950/30'
+							: 'transition-colors hover:bg-muted/50'}
+					>
 						<Table.Cell>{formatDateTime(row.inspectedAt)}</Table.Cell>
 						<Table.Cell class="font-mono font-medium">{row.partNo}</Table.Cell>
 						<Table.Cell>
@@ -454,7 +460,7 @@
 						</Table.Cell>
 						<Table.Cell class="text-end">
 							<Button
-								variant="outline"
+								variant="ghost"
 								size="sm"
 								onclick={() => openDetail(row)}
 								disabled={detailLoading}
@@ -474,8 +480,14 @@
 						{/each}
 					{:else}
 						<Table.Row>
-							<Table.Cell colspan={8} class="h-24 text-center text-muted-foreground">
-								Belum ada inspeksi.
+							<Table.Cell colspan={8} class="p-0">
+								<div class="p-4">
+									<EmptyState
+										icon={InboxIcon}
+										title="Belum ada inspeksi"
+										description="Hasil inspeksi akan muncul di sini setelah operator melakukan pemeriksaan."
+									/>
+								</div>
 							</Table.Cell>
 						</Table.Row>
 					{/if}
@@ -483,30 +495,15 @@
 			</Table.Body>
 		</Table.Root>
 
-		<div class="flex items-center justify-between">
-			<span class="text-sm text-muted-foreground">
-				{total} inspeksi · Halaman {page} dari {totalPages}
-				{#if loading}<span class="ms-1">· Memuat…</span>{/if}
-			</span>
-			<div class="flex gap-2">
-				<Button
-					variant="outline"
-					size="sm"
-					disabled={page <= 1 || loading}
-					onclick={() => goToPage(page - 1)}
-				>
-					Sebelumnya
-				</Button>
-				<Button
-					variant="outline"
-					size="sm"
-					disabled={page >= totalPages || loading}
-					onclick={() => goToPage(page + 1)}
-				>
-					Berikutnya
-				</Button>
-			</div>
-		</div>
+		<PaginationFooter
+			{total}
+			{page}
+			{totalPages}
+			{loading}
+			unit="inspeksi"
+			onPrev={() => goToPage(page - 1)}
+			onNext={() => goToPage(page + 1)}
+		/>
 	</CardContent>
 </Card>
 

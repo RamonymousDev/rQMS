@@ -80,7 +80,7 @@
 				{...props}
 				variant="outline"
 				aria-expanded={open}
-				class={cn('h-9 w-full justify-start gap-2 font-normal', className)}
+				class={cn('h-10 w-full justify-start gap-2 font-normal', className)}
 			>
 				<CalendarIcon class="size-4 shrink-0 opacity-50" />
 				{#if selected}

@@ -52,7 +52,7 @@
 				variant="outline"
 				role="combobox"
 				aria-expanded={open}
-				class={cn('h-9 w-full justify-between gap-2 font-normal', className)}
+				class={cn('h-10 w-full justify-between gap-2 font-normal', className)}
 			>
 				{#if selectedLabel}
 					<span class="truncate">{selectedLabel}</span>
