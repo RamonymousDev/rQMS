@@ -13,6 +13,9 @@ node_modules
 .DS_Store
 Thumbs.db
 
+# Agent skills: artifact lokal hasil install (sumber di skills-lock.json)
+.opencode/skills/
+
 # Env
 .env
 .env.*
