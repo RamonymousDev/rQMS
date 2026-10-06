@@ -46,9 +46,36 @@ export const GET: RequestHandler = async ({ params, request, url }) => {
 
 	const channel = `board_${code}`;
 
-	const stream = new ReadableStream({
+	// State koneksi dipakai bersama `start` dan `cancel` agar cleanup idempoten —
+	// klien yang putus bisa memicu keduanya (abort + cancel), dan tanpa guard
+	// koneksi Postgres dedicated bisa bocor sampai max_connections habis.
+	let sql: ReturnType<typeof postgres> | null = null;
+	let heartbeat: ReturnType<typeof setInterval> | undefined;
+	let closed = false;
+	let controllerRef: ReadableStreamDefaultController<string> | null = null;
+
+	const cleanup = async () => {
+		if (closed) return;
+		closed = true;
+		if (heartbeat) clearInterval(heartbeat);
+		try {
+			await sql?.end({ timeout: 2 });
+		} catch {
+			// ignore
+		}
+		try {
+			controllerRef?.close();
+		} catch {
+			// ignore
+		}
+	};
+
+	const stream = new ReadableStream<string>({
 		async start(controller) {
+			controllerRef = controller;
+
 			const send = (event: string, data: unknown) => {
+				if (closed) return;
 				try {
 					controller.enqueue(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 				} catch {
@@ -58,8 +85,6 @@ export const GET: RequestHandler = async ({ params, request, url }) => {
 
 			// Kirim data awal
 			send('init', initial);
-
-			let sql: ReturnType<typeof postgres> | null = null;
 
 			try {
 				sql = postgres(env.DATABASE_URL!, { max: 1 });
@@ -73,31 +98,33 @@ export const GET: RequestHandler = async ({ params, request, url }) => {
 						// Jangan crash SSE karena query error sementara
 					}
 				});
-
-				// Cleanup saat client disconnect — cukup end() koneksi,
-				// postgres.js akan UNLISTEN otomatis saat koneksi ditutup.
-				request.signal.addEventListener('abort', async () => {
-					try {
-						await sql!.end({ timeout: 2 });
-					} catch {
-						// ignore
-					}
-					try {
-						controller.close();
-					} catch {
-						// ignore
-					}
-				});
 			} catch {
 				// Gagal setup LISTEN — kirim error ke client lalu tutup
 				send('error', { message: 'Realtime unavailable' });
-				try {
-					await sql?.end({ timeout: 2 });
-				} catch {
-					// ignore
-				}
-				controller.close();
+				await cleanup();
+				return;
 			}
+
+			// Cleanup saat client disconnect — cukup end() koneksi,
+			// postgres.js akan UNLISTEN otomatis saat koneksi ditutup.
+			request.signal.addEventListener('abort', () => {
+				void cleanup();
+			});
+
+			// Heartbeat komentar SSE tiap 25 detik: menjaga koneksi melewati
+			// proxy/timeout dan membuat socket mati terdeteksi (enqueue gagal).
+			heartbeat = setInterval(() => {
+				try {
+					controller.enqueue(': ping\n\n');
+				} catch {
+					void cleanup();
+				}
+			}, 25_000);
+		},
+		cancel() {
+			// Dipanggil saat consumer membatalkan stream (jalur disconnect kedua,
+			// tidak selalu diiringi abort).
+			void cleanup();
 		}
 	});
 

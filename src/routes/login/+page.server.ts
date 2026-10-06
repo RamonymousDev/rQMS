@@ -2,7 +2,11 @@ import { fail, redirect } from '@sveltejs/kit';
 import { setSessionCookie, signSession } from '$lib/server/auth.js';
 import { getUserWithPermissions } from '$lib/server/permissions.js';
 import { verifyPassword } from '$lib/server/password.js';
-import { enforceRateLimit } from '$lib/server/rate-limit.js';
+import {
+	clearLoginFailures,
+	enforceLoginRateLimit,
+	recordLoginFailure
+} from '$lib/server/rate-limit.js';
 import { logAction } from '$lib/server/audit.js';
 
 export const actions = {
@@ -17,11 +21,14 @@ export const actions = {
 		}
 
 		const ip = event.getClientAddress();
-		await enforceRateLimit('login', ip);
+		// Hanya percobaan GAGAL yang dihitung — login sukses tidak memakan kuota
+		// (kuota per-IP untuk jaringan NAT pabrik, lihat rate-limit.ts).
+		await enforceLoginRateLimit(nik, ip);
 
 		const user = await getUserWithPermissions(nik);
 
 		if (!user || !user.isActive) {
+			await recordLoginFailure(nik, ip);
 			await logAction(null, {
 				action: 'login_failed',
 				entity: 'auth',
@@ -34,6 +41,7 @@ export const actions = {
 		const valid = await verifyPassword(user.password, password);
 
 		if (!valid) {
+			await recordLoginFailure(nik, ip);
 			await logAction(null, {
 				action: 'login_failed',
 				entity: 'auth',
@@ -42,6 +50,8 @@ export const actions = {
 			});
 			return fail(401, { nik, message: 'NIK atau password salah.' });
 		}
+
+		await clearLoginFailures(nik);
 
 		const token = await signSession({ id: user.id, nik: user.nik, name: user.name });
 		setSessionCookie(cookies, token);
