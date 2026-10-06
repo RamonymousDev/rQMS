@@ -9,6 +9,9 @@
 
 RQMS (Quality Management System) adalah aplikasi web untuk pencatatan dan monitoring inspeksi kualitas manufaktur. Operator mengisi form inspeksi di line produksi; admin mengelola master data dan memantau hasil. Ada juga **board publik** per-line yang menampilkan status inspeksi secara realtime.
 
+> Deploy ke production (build, env proxy, Apache/Nginx, Cloudflare, troubleshooting):
+> lihat **`DEPLOYMENT.md`**.
+
 **Domain utama:**
 
 - **Master data**: Permission, Process, Line, Part, Hardware, User
