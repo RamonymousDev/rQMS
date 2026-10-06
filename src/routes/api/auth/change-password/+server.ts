@@ -9,14 +9,19 @@ import {
 	validatePasswordStrength,
 	isPasswordReused
 } from '$lib/server/password.js';
-import { getSessionUser } from '$lib/server/auth.js';
-import { enforceRateLimit } from '$lib/server/rate-limit.js';
+import {
+	getSessionUser,
+	revokeUserSessions,
+	setSessionCookie,
+	signSession
+} from '$lib/server/auth.js';
+import { enforceUserRateLimit } from '$lib/server/rate-limit.js';
 
 export const POST = async (event) => {
 	const session = await getSessionUser(event.cookies);
 	if (!session) throw error(401, 'Belum login.');
 
-	await enforceRateLimit('admin', event.getClientAddress());
+	await enforceUserRateLimit('admin', session.id);
 
 	const body = await event.request.json().catch(() => null);
 	if (!body || typeof body.currentPassword !== 'string' || typeof body.newPassword !== 'string') {
@@ -48,6 +53,13 @@ export const POST = async (event) => {
 		.update(users)
 		.set({ password: hashed, passwordHistory: history, updatedAt: new Date() })
 		.where(eq(users.id, session.id));
+
+	// Password berubah → semua sesi lama (termasuk perangkat lain) tidak valid
+	// lagi. Terbitkan ulang token untuk perangkat ini agar user tidak ter-logout
+	// dari sesi yang sedang dipakai.
+	await revokeUserSessions(session.id);
+	const token = await signSession({ id: session.id, nik: session.nik, name: session.name });
+	setSessionCookie(event.cookies, token);
 
 	return json({ ok: true });
 };

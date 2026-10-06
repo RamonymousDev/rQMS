@@ -3,6 +3,7 @@ import { error } from '@sveltejs/kit';
 import { db } from '../db/index.js';
 import { permissions, users, userPermissions } from '../db/schema.js';
 import { hashPassword } from '../password.js';
+import { revokeUserSessions } from '../auth.js';
 import { parseBody, parseId } from './admin.js';
 import { userSchema, userUpdateSchema } from './types.js';
 
@@ -80,14 +81,22 @@ export async function updateUser(id: string, body: unknown) {
 		? await validatePermissionIds(data.permissionIds)
 		: undefined;
 
-	return db.transaction(async (tx) => {
+	// Sesi lama harus mati saat: password direset, NIK berubah (NIK ada di
+	// dalam token), atau akun dinonaktifkan. Perubahan permission/name tidak
+	// perlu revoke — permission dibaca ulang dari DB di setiap request.
+	const shouldRevokeSessions =
+		Boolean(data.password) ||
+		(data.nik !== undefined && data.nik !== existing.nik) ||
+		data.isActive === false;
+
+	const row = await db.transaction(async (tx) => {
 		const values: Partial<typeof users.$inferInsert> = { updatedAt: new Date() };
 		if (data.nik !== undefined) values.nik = data.nik;
 		if (data.name !== undefined) values.name = data.name;
 		if (data.isActive !== undefined) values.isActive = data.isActive;
 		if (data.password) values.password = await hashPassword(data.password);
 
-		const [row] = await tx.update(users).set(values).where(eq(users.id, id)).returning();
+		const [updated] = await tx.update(users).set(values).where(eq(users.id, id)).returning();
 
 		if (permissionIds) {
 			await tx.delete(userPermissions).where(eq(userPermissions.userId, id));
@@ -97,6 +106,12 @@ export async function updateUser(id: string, body: unknown) {
 					.values(permissionIds.map((permissionId) => ({ userId: id, permissionId })));
 			}
 		}
-		return row;
+		return updated;
 	});
+
+	if (shouldRevokeSessions) {
+		await revokeUserSessions(id);
+	}
+
+	return row;
 }

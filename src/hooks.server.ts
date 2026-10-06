@@ -3,6 +3,8 @@ import {
 	SESSION_COOKIE,
 	verifySession,
 	isSessionRevoked,
+	isUserSessionRevoked,
+	isUserActive,
 	clearSessionCookie
 } from '$lib/server/auth.js';
 
@@ -14,8 +16,15 @@ export const handle: Handle = async ({ event, resolve }) => {
 	if (token) {
 		const user = await verifySession(token);
 		if (user) {
-			const revoked = await isSessionRevoked(user.jti);
-			if (revoked) {
+			// Tiga lapis: blacklist per-token (logout), revoke per-user (password
+			// diganti / NIK berubah), dan status isActive langsung dari DB agar
+			// akun nonaktif tidak bisa memakai token lama kalau marker Redis hilang.
+			const [revokedToken, revokedUser, active] = await Promise.all([
+				isSessionRevoked(user.jti),
+				isUserSessionRevoked(user.id, user.issuedAt),
+				isUserActive(user.id)
+			]);
+			if (revokedToken || revokedUser || !active) {
 				clearSessionCookie(event.cookies);
 			} else {
 				event.locals.user = user;

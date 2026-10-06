@@ -4,6 +4,7 @@ import type { Cookies } from '@sveltejs/kit';
 import { SignJWT, jwtVerify } from 'jose';
 import { randomUUID } from 'crypto';
 import { redis } from './redis.js';
+import { db } from './db/index.js';
 
 if (!env.JWT_SECRET) throw new Error('JWT_SECRET is not set');
 
@@ -12,15 +13,20 @@ const secret = new TextEncoder().encode(env.JWT_SECRET);
 export const SESSION_COOKIE = 'rqms_token';
 const SESSION_MAX_AGE = 60 * 60 * 24;
 const REVOKE_KEY_PREFIX = 'revoked_jti:';
+const USER_REVOKE_KEY_PREFIX = 'user_revoked_at:';
+/** Marker revoke user hanya perlu hidup selama token masih mungkin beredar (1 hari) + buffer. */
+const USER_REVOKE_TTL = 60 * 60 * 24 * 2;
 
 export interface SessionUser {
 	id: string;
 	nik: string;
 	name: string;
 	jti: string;
+	/** Waktu terbit token (detik epoch) — dasar cek revoke per-user. */
+	issuedAt?: number;
 }
 
-type SignSessionInput = Omit<SessionUser, 'jti'>;
+type SignSessionInput = Omit<SessionUser, 'jti' | 'issuedAt'>;
 
 export async function signSession(user: SignSessionInput): Promise<string> {
 	return new SignJWT({ nik: user.nik, name: user.name })
@@ -43,7 +49,13 @@ export async function verifySession(token: string): Promise<SessionUser | null> 
 		) {
 			return null;
 		}
-		return { id: payload.sub, nik: payload.nik, name: payload.name, jti: payload.jti };
+		return {
+			id: payload.sub,
+			nik: payload.nik,
+			name: payload.name,
+			jti: payload.jti,
+			issuedAt: payload.iat ?? 0
+		};
 	} catch {
 		return null;
 	}
@@ -76,6 +88,62 @@ export async function isSessionRevoked(jti: string): Promise<boolean> {
 		// Redis error: fail-open agar app tidak down, tapi log warning
 		console.warn('[auth] Redis unavailable during revocation check, allowing request through');
 		return false;
+	}
+}
+
+/**
+ * Revoke SEMUA sesi milik user (mis. setelah ganti password atau akun
+ * dinonaktifkan). Bekerja dengan menandai waktu revoke; token yang diterbitkan
+ * sebelum waktu itu (iat < marker) dianggap tidak valid.
+ */
+export async function revokeUserSessions(userId: string): Promise<void> {
+	try {
+		await redis.set(
+			`${USER_REVOKE_KEY_PREFIX}${userId}`,
+			String(Math.floor(Date.now() / 1000)),
+			'EX',
+			USER_REVOKE_TTL
+		);
+	} catch (err) {
+		console.warn('[auth] Gagal menandai revoke sesi user:', err);
+	}
+}
+
+/**
+ * Cek apakah token user diterbitkan sebelum penandaan revoke per-user
+ * (lihat `revokeUserSessions`). Fail-open saat Redis down.
+ */
+export async function isUserSessionRevoked(
+	userId: string,
+	issuedAt: number | undefined
+): Promise<boolean> {
+	try {
+		const val = await redis.get(`${USER_REVOKE_KEY_PREFIX}${userId}`);
+		if (val === null) return false;
+		const revokedAt = Number(val);
+		if (!Number.isFinite(revokedAt)) return false;
+		return (issuedAt ?? 0) < revokedAt;
+	} catch {
+		console.warn('[auth] Redis unavailable during user revocation check, allowing request through');
+		return false;
+	}
+}
+
+/**
+ * Lapisan terakhir: cek status akun langsung ke DB. Menutup celah token lama
+ * hidup kembali saat marker revoke Redis hilang (restart tanpa persistence,
+ * eviction). Fail-open saat DB error — halaman akan gagal render sendiri.
+ */
+export async function isUserActive(userId: string): Promise<boolean> {
+	try {
+		const row = await db.query.users.findFirst({
+			where: (u, { eq }) => eq(u.id, userId),
+			columns: { isActive: true }
+		});
+		return row?.isActive ?? false;
+	} catch (err) {
+		console.warn('[auth] Gagal cek status user, request dilewatkan:', err);
+		return true;
 	}
 }
 

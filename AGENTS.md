@@ -277,14 +277,23 @@ Hasil seed:
 
 ```
 POST /login (form action)
-  → enforceRateLimit('login', ip)   # 5 req / 15 menit per IP
+  → enforceLoginRateLimit(nik, ip)  # HANYA percobaan gagal yang dihitung:
+                                    # per-akun 5 gagal/15 mnt + per-IP 50 gagal/15 mnt
   → getUserWithPermissions(nik)
   → verifyPassword(hash, password)
+  → gagal  → recordLoginFailure(nik, ip) + logAction('login_failed') → 401
+  → sukses → clearLoginFailures(nik)   # counter akun dikosongkan
   → signSession({ id, nik, name })  # JWT HS256, exp: 1d, jti: randomUUID
   → setSessionCookie(cookies, token) # httpOnly, sameSite: lax, secure di prod
   → logAction(user, 'login_success')
   → redirect 303 /dashboard
 ```
+
+> **Kenapa hanya kegagalan:** pabrik berbagi satu IP publik (NAT) dan login
+> bersamaan saat pergantian shift. Kalau login sukses ikut memakan kuota
+> per-IP, beberapa login normal saja sudah mengunci SEMUA akun 15 menit
+> (insiden "semua akun tidak bisa login"). Fail-open saat Redis down —
+> kredensial tetap diverifikasi ke DB.
 
 ### Hooks Server (`src/hooks.server.ts`)
 
@@ -292,11 +301,13 @@ Setiap request:
 
 1. Baca cookie `rqms_token`
 2. `verifySession(token)` → parse JWT
-3. `isSessionRevoked(jti)` → cek Redis key `rqms:revoked_jti:<jti>`
-4. Jika valid & tidak di-revoke: set `event.locals.user`
-5. Jika di-revoke: `clearSessionCookie`
-6. Body limit: 1 MB untuk non-GET/HEAD
-7. Security headers: `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`
+3. `isSessionRevoked(jti)` → cek Redis key `rqms:revoked_jti:<jti>` (logout per-token)
+4. `isUserSessionRevoked(userId, issuedAt)` → cek Redis key `rqms:user_revoked_at:<userId>` (revoke semua sesi user: password diganti / akun dinonaktifkan / NIK berubah)
+5. `isUserActive(userId)` → cek `users.isActive` langsung ke DB (menutup celah token lama saat marker Redis hilang; fail-open saat DB error)
+6. Jika valid & tidak di-revoke: set `event.locals.user`
+7. Jika di-revoke/nonaktif: `clearSessionCookie`
+8. Body limit: 1 MB untuk non-GET/HEAD
+9. Security headers: `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`
    (`camera=(self)` diizinkan — QR scanner halaman inspect butuh akses kamera; microphone & geolocation diblokir)
 
 ### Logout
@@ -321,7 +332,7 @@ POST /api/auth/logout
 
 ```ts
 interface Locals {
-	user: SessionUser | null; // { id, nik, name, jti }
+	user: SessionUser | null; // { id, nik, name, jti, issuedAt }
 }
 ```
 
@@ -330,7 +341,8 @@ interface Locals {
 - Hash: argon2 (via `argon2` package)
 - Aturan kekuatan: min 8 karakter, huruf besar, huruf kecil, angka, simbol
 - History: 5 password terakhir disimpan di kolom `passwordHistory` (jsonb array hash). Tidak bisa reuse.
-- Change password endpoint: `POST /api/auth/change-password` (perlu login, rate limit `admin`)
+- Change password endpoint: `POST /api/auth/change-password` (perlu login, rate limit `admin` per-user).
+  Sukses ganti password → `revokeUserSessions(userId)` (semua sesi lama mati) + token perangkat ini diterbitkan ulang.
 
 ### ADMIN_PERMISSION
 
@@ -473,6 +485,7 @@ Payload `init`/`update` berisi `{ line, parts, date, today }`. Saat melihat hari
 ```
 POST /api/auth/logout           → revoke session + clear cookie
 POST /api/auth/change-password  → { currentPassword, newPassword }
+                                  → sukses: revoke semua sesi user + terbitkan ulang token perangkat ini
 ```
 
 ---
@@ -486,6 +499,9 @@ signSession(user); // → JWT string (HS256, exp 1d, random jti)
 verifySession(token); // → SessionUser | null
 revokeSession(token); // → void (set Redis key dengan TTL sisa token)
 isSessionRevoked(jti); // → boolean (Redis lookup, fail-open jika Redis down)
+revokeUserSessions(userId); // → void (tandai semua token user lama tidak valid)
+isUserSessionRevoked(userId, issuedAt); // → boolean (fail-open jika Redis down)
+isUserActive(userId); // → boolean (cek isActive ke DB, fail-open saat DB error)
 setSessionCookie(cookies, tok); // httpOnly, sameSite lax, secure di prod
 clearSessionCookie(cookies);
 getSessionUser(cookies); // → SessionUser | null (baca + verify cookie)
@@ -505,20 +521,37 @@ isPasswordReused(newPass, history); // → boolean (cek terhadap semua hash hist
 
 ```ts
 redis; // singleton ioredis, keyPrefix 'rqms:', maxRetries 3
-rateLimit({ key, limit, windowSeconds }); // sliding-window via sorted set
+rateLimit({ key, limit, windowSeconds }); // sliding-window via sorted set (catat + hitung)
 // → { allowed, limit, remaining, reset }
+checkRateLimit({ key, limit, windowSeconds }); // baca status TANPA mencatat
+// → { allowed, limit, remaining, retryAfterSeconds }
+recordRateLimit(key, windowSeconds); // catat satu percobaan
+resetRateLimit(key); // kosongkan counter
 ```
 
 ### `src/lib/server/rate-limit.ts`
 
 ```ts
 RATE_LIMITS = {
-	login: { limit: 5, windowSeconds: 900 }, // per IP
+	login: { limit: 5, windowSeconds: 900 }, // (legacy) login kini pakai LOGIN_LIMITS
 	submit: { limit: 30, windowSeconds: 60 }, // per user ID
-	admin: { limit: 60, windowSeconds: 60 } // per IP
+	admin: { limit: 60, windowSeconds: 60 } // per user (enforceUserRateLimit)
 };
 enforceRateLimit(preset, identifier); // throw 429 jika melampaui limit
+
+// Login — HANYA kegagalan yang dihitung (lihat §7):
+LOGIN_LIMITS = { account: { limit: 5, windowSeconds: 900 }, ip: { limit: 50, windowSeconds: 900 } };
+enforceLoginRateLimit(nik, ip); // cek sebelum verifikasi kredensial, fail-open saat Redis down
+recordLoginFailure(nik, ip); // dipanggil saat kredensial salah / user nonaktif
+clearLoginFailures(nik); // dipanggil setelah login sukses
+
+enforceUserRateLimit(preset, userId); // key `preset:user:<id>` — pakai ini untuk endpoint terautentikasi
 ```
+
+> **Aturan rate limit:** endpoint terautentikasi memakai `enforceUserRateLimit`
+> (kunci = user id), BUKAN IP — agar user di jaringan NAT pabrik tidak saling
+> memakan kuota. Kunci per-IP hanya untuk endpoint publik/pre-auth (login,
+> board).
 
 ### `src/lib/server/audit.ts`
 
@@ -1065,7 +1098,7 @@ Yang sudah memakai hari operasional:
 1. Buat logika di `src/lib/server/<domain>/index.ts`
 2. Buat route handler di `src/routes/api/<path>/+server.ts` (tipis — hanya guard + call)
 3. Tambahkan guard yang sesuai (`requireAdmin` atau `requireUser`)
-4. Tambahkan `enforceRateLimit` dan `logAction` jika relevan
+4. Tambahkan rate limit (`enforceUserRateLimit` untuk endpoint terautentikasi, `enforceRateLimit` untuk publik) dan `logAction` jika relevan
 5. Jalankan: `bun run format && bun run check`
 
 ### Menambah Halaman Admin Baru

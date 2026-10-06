@@ -10,6 +10,7 @@ export type RateLimitPreset = {
 export const RATE_LIMITS = {
 	login: { limit: 5, windowSeconds: 60 * 15 },
 	submit: { limit: 30, windowSeconds: 60 },
+	/** Per user (bukan per IP) — lihat enforceUserRateLimit. */
 	admin: { limit: 60, windowSeconds: 60 }
 } as const satisfies Record<string, { limit: number; windowSeconds: number }>;
 
@@ -26,6 +27,19 @@ export async function enforceRateLimit(preset: keyof typeof RATE_LIMITS, identif
 	}
 
 	return result;
+}
+
+/**
+ * Rate limit untuk endpoint yang sudah terautentikasi — key memakai user id,
+ * bukan IP. Kuota per-IP membuat seluruh user di jaringan NAT pabrik saling
+ * memakan jatah (polling dashboard 30 detik saja bisa menghabiskan 60/menit),
+ * padahal identitas pemanggil sudah pasti dari sesi.
+ */
+export async function enforceUserRateLimit(
+	preset: keyof typeof RATE_LIMITS,
+	userId: string
+): Promise<void> {
+	await enforceRateLimit(preset, `user:${userId}`);
 }
 
 /**
