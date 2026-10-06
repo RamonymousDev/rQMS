@@ -31,8 +31,8 @@ Arsitektur:
 ## 2. Ambil kode & install
 
 ```bash
-git clone <repo-url> /opt/rqms
-cd /opt/rqms
+git clone <repo-url> /var/www/rqms
+cd /var/www/rqms
 bun install
 ```
 
@@ -44,23 +44,30 @@ bun install
 > `adapter-node` di production **TIDAK** memuat `.env`. Kamu harus memberikan
 > variabel env lewat salah satu cara:
 >
-> - `node --env-file=.env build/index.js` ← paling simpel
-> - systemd `EnvironmentFile=/opt/rqms/.env`
-> - pm2: export di shell / `env:` pada ecosystem file
+> - `node --env-file=.env build/index.js` ← paling simpel untuk Node
+> - systemd `EnvironmentFile=/var/www/rqms/.env` ← cara yang dipakai di produksi
+> - Bun (runtime) **memuat `.env` otomatis** dari `WorkingDirectory` — jadi kalau
+>   menjalankan `bun build/index.js`, env terbaca walau tanpa EnvironmentFile.
+>   Dua-duanya boleh dipakai bersamaan (redundan, tidak konflik).
+>
+> ⚠️ Format `.env` untuk `EnvironmentFile` systemd lebih ketat daripada shell:
+> tanpa `export`, tanpa komentar di akhir baris (`FOO=bar # komentar` bikin nilai
+> ikut memuat komentar), boleh pakai tanda kutip. Kalau service gagal start,
+> cek `journalctl -u rqms` — biasanya masalah parsing ini.
 
-### Variabel wajib
+### Variabel wajib (salinan ke `/var/www/rqms/.env`)
 
 ```env
+# Runtime
+HOST="127.0.0.1"           # WAJIB — default adapter-node 0.0.0.0 (port 3000 terbuka publik)
+PORT="3000"
+
+# Database & cache
 DATABASE_URL="postgres://rqms:passwordkuat@localhost:5432/rqms"
 REDIS_URL="redis://:passwordredis@localhost:6379"
+
+# Auth
 JWT_SECRET="<hasil: openssl rand -hex 32>"
-```
-
-### Variabel production (adapter-node)
-
-```env
-HOST="127.0.0.1"          # Node hanya listen lokal — Apache yang menghadap publik
-PORT="3000"
 
 # --- Wajib saat di balik reverse proxy ---
 ORIGIN="https://qms.devmoon.net"
@@ -72,6 +79,8 @@ PROTOCOL_HEADER="x-forwarded-proto"
 # BODY_SIZE_LIMIT="1M"     # default adapter-node 512K; hooks.server.ts membatasi 1MB
 # HOST_HEADER="x-forwarded-host"   # tidak perlu kalau proxy memakai ProxyPreserveHost On
 ```
+
+Pastikan `www-data` bisa membaca file: `chown www-data:www-data /var/www/rqms/.env && chmod 640 /var/www/rqms/.env`.
 
 Catatan:
 
@@ -126,31 +135,47 @@ FOR EACH ROW EXECUTE FUNCTION notify_board_update();
 ## 5. Build & jalankan
 
 ```bash
-cd /opt/rqms
+cd /var/www/rqms
+bun install
 bun run build
-node --env-file=.env build/index.js
 ```
 
-### systemd (disarankan)
+### systemd (setup produksi saat ini)
 
 `/etc/systemd/system/rqms.service`:
 
 ```ini
 [Unit]
-Description=RQMS (Quality Management System)
+Description=RQMS SvelteKit App
 After=network.target postgresql.service redis-server.service
 
 [Service]
 Type=simple
-User=rqms
-WorkingDirectory=/opt/rqms
-ExecStart=/usr/bin/node --env-file=.env build/index.js
+User=www-data
+WorkingDirectory=/var/www/rqms
+ExecStart=/usr/local/bin/bun ./build/index.js
+EnvironmentFile=/var/www/rqms/.env
 Restart=always
-RestartSec=3
+RestartSec=5
+
+# Hardening opsional (aman untuk app ini)
+NoNewPrivileges=true
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target
 ```
+
+Catatan:
+
+- `After=redis-server.service` — nama unit Redis berbeda antar distro
+  (Ubuntu: `redis-server.service`, sebagian: `redis.service`/`valkey.service`).
+  Nama yang tidak ada di sistem tidak menggagalkan service (hanya diabaikan),
+  tapi samakan agar urutan start benar.
+- Bun memuat `.env` dari `WorkingDirectory` otomatis; `EnvironmentFile` tetap
+  dipertahankan sebagai jalur kedua (redundan, tidak konflik).
+- Tidak perlu rebuild saat mengubah `.env` — cukup `systemctl restart rqms`.
+- Kalau kelak pindah ke Node: `ExecStart=/usr/bin/node --env-file=.env build/index.js`.
 
 ```bash
 systemctl daemon-reload
@@ -309,7 +334,7 @@ Contoh cron backup:
 ## 10. Update / redeploy
 
 ```bash
-cd /opt/rqms
+cd /var/www/rqms
 git pull
 bun install            # kalau ada dependency baru
 bun run build
