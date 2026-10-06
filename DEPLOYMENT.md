@@ -57,9 +57,14 @@ bun install
 
 ### Variabel wajib (salinan ke `/var/www/rqms/.env`)
 
+> ⚠️ **Jangan taruh komentar di baris yang sama dengan nilai.** Systemd membaca
+> semuanya sebagai nilai (`HOST="127.0.0.1" # catatan` → nilai `127.0.0.1 # catatan`)
+> dan service gagal start dengan "Failed to load environment files". Komentar
+> hanya boleh di baris sendiri yang diawali `#`.
+
 ```env
 # Runtime
-HOST="127.0.0.1"           # WAJIB — default adapter-node 0.0.0.0 (port 3000 terbuka publik)
+HOST="127.0.0.1"
 PORT="3000"
 
 # Database & cache
@@ -69,15 +74,17 @@ REDIS_URL="redis://:passwordredis@localhost:6379"
 # Auth
 JWT_SECRET="<hasil: openssl rand -hex 32>"
 
-# --- Wajib saat di balik reverse proxy ---
+# Reverse proxy — XFF_DEPTH = jumlah proxy di depan Node
+# (Cloudflare + Apache = 2, Apache saja = 1)
 ORIGIN="https://qms.devmoon.net"
 ADDRESS_HEADER="x-forwarded-for"
-XFF_DEPTH="2"              # jumlah proxy di depan Node (Cloudflare + Apache = 2)
+XFF_DEPTH="2"
 PROTOCOL_HEADER="x-forwarded-proto"
 
-# Opsional
-# BODY_SIZE_LIMIT="1M"     # default adapter-node 512K; hooks.server.ts membatasi 1MB
-# HOST_HEADER="x-forwarded-host"   # tidak perlu kalau proxy memakai ProxyPreserveHost On
+# Opsional: default adapter-node 512K, hooks.server.ts membatasi 1MB
+# BODY_SIZE_LIMIT="1M"
+# Tidak perlu kalau proxy memakai ProxyPreserveHost On
+# HOST_HEADER="x-forwarded-host"
 ```
 
 Pastikan `www-data` bisa membaca file: `chown www-data:www-data /var/www/rqms/.env && chmod 640 /var/www/rqms/.env`.
