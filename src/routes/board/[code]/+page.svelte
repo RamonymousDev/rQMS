@@ -185,10 +185,8 @@
 						{data.line.code}
 					</Badge>
 					{#if sseConnected}
-						<span
-							class="flex items-center gap-1.5 text-xs font-medium text-green-600 dark:text-green-400"
-						>
-							<span class="inline-block h-2 w-2 animate-pulse rounded-full bg-green-500"></span>
+						<span class="flex items-center gap-1.5 text-xs font-medium text-status-ok">
+							<span class="inline-block h-2 w-2 animate-pulse rounded-full bg-status-ok"></span>
 							Live
 						</span>
 					{:else}
@@ -207,15 +205,21 @@
 				<!-- Legend -->
 				<div class="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
 					<div class="flex items-center gap-1.5">
-						<span class="h-3 w-3 rounded-full bg-green-500"></span>
+						<span class="size-3 rounded-full bg-status-ok"></span>
 						<span>OK</span>
 					</div>
 					<div class="flex items-center gap-1.5">
-						<span class="h-3 w-3 rounded-full bg-red-500"></span>
+						<!--
+							NG di legend memakai ring yang sama dengan badge aslinya
+							(stage-badge-row.svelte) supaya bentuk, bukan hanya hue,
+							membedakan OK dari NG.
+						-->
+						<span class="size-3 rounded-full bg-status-ng ring-2 ring-status-ng/35"></span>
 						<span>NG</span>
 					</div>
 					<div class="flex items-center gap-1.5">
-						<span class="h-3 w-3 rounded-full bg-muted-foreground/30"></span>
+						<span class="size-3 rounded-full border border-dashed border-muted-foreground/40"
+						></span>
 						<span>—</span>
 					</div>
 				</div>
@@ -386,9 +390,7 @@
 							<div
 								class={cn(
 									'overflow-hidden rounded-md border text-sm transition-colors',
-									row.overallStatus === 'NG'
-										? 'border-red-200 dark:border-red-900/50'
-										: 'border-border'
+									row.overallStatus === 'NG' ? 'border-status-ng/30' : 'border-border'
 								)}
 							>
 								<button
@@ -404,8 +406,8 @@
 										class={cn(
 											'shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold',
 											row.overallStatus === 'OK'
-												? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
-												: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400'
+												? 'bg-status-ok-fill text-status-ok'
+												: 'bg-status-ng-fill text-status-ng'
 										)}
 									>
 										{row.overallStatus}
@@ -477,8 +479,8 @@
 																class={cn(
 																	'shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold',
 																	point.status === 'OK'
-																		? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
-																		: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400'
+																		? 'bg-status-ok-fill text-status-ok'
+																		: 'bg-status-ng-fill text-status-ng'
 																)}
 															>
 																{point.status}
@@ -514,8 +516,8 @@
 																class={cn(
 																	'shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold',
 																	hw.status === 'OK'
-																		? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
-																		: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400'
+																		? 'bg-status-ok-fill text-status-ok'
+																		: 'bg-status-ng-fill text-status-ng'
 																)}
 															>
 																{hw.status}
@@ -550,8 +552,8 @@
 																class={cn(
 																	'shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold',
 																	length.status === 'OK'
-																		? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
-																		: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400'
+																		? 'bg-status-ok-fill text-status-ok'
+																		: 'bg-status-ng-fill text-status-ng'
 																)}
 															>
 																{length.status}
@@ -578,8 +580,8 @@
 															class={cn(
 																'shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold',
 																row.visualStatus === 'OK'
-																	? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
-																	: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400'
+																	? 'bg-status-ok-fill text-status-ok'
+																	: 'bg-status-ng-fill text-status-ng'
 															)}
 														>
 															{row.visualStatus}

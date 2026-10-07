@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { Badge } from '$lib/components/ui/badge/index.js';
+	import StatusBadge from '$lib/components/status-badge.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Card, CardContent } from '$lib/components/ui/card/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
@@ -19,7 +20,7 @@
 	} from '$lib/components/ui/select/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import PageHeader from '$lib/components/page-header.svelte';
-	import EmptyState from '$lib/components/empty-state.svelte';
+	import * as Empty from '$lib/components/ui/empty/index.js';
 	import PaginationFooter from '$lib/components/pagination-footer.svelte';
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import InboxIcon from '@lucide/svelte/icons/inbox';
@@ -292,13 +293,13 @@
 		<p class="text-2xl font-bold">{total}</p>
 		<p class="text-xs text-muted-foreground">Total</p>
 	</div>
-	<div class="rounded-lg border bg-green-50 px-3 py-2 text-center dark:bg-green-950/30">
-		<p class="text-2xl font-bold text-green-700 dark:text-green-400">{okCount}</p>
-		<p class="text-xs text-green-600 dark:text-green-400">OK</p>
+	<div class="rounded-lg border border-status-ok/30 bg-status-ok-fill px-3 py-2 text-center">
+		<p class="text-2xl font-bold text-status-ok tabular-nums">{okCount}</p>
+		<p class="text-xs font-medium text-status-ok">OK</p>
 	</div>
-	<div class="rounded-lg border bg-red-50 px-3 py-2 text-center dark:bg-red-950/30">
-		<p class="text-2xl font-bold text-red-700 dark:text-red-400">{ngCount}</p>
-		<p class="text-xs text-red-600 dark:text-red-400">NG</p>
+	<div class="rounded-lg border border-status-ng/30 bg-status-ng-fill px-3 py-2 text-center">
+		<p class="text-2xl font-bold text-status-ng tabular-nums">{ngCount}</p>
+		<p class="text-xs font-medium text-status-ng">NG</p>
 	</div>
 </div>
 
@@ -438,7 +439,7 @@
 				{#each rows as row (row.id)}
 					<Table.Row
 						class={row.overallStatus === 'NG'
-							? 'bg-red-50/50 transition-colors hover:bg-red-50 dark:bg-red-950/20 dark:hover:bg-red-950/30'
+							? 'bg-status-ng-fill/40 transition-colors hover:bg-status-ng-fill'
 							: 'transition-colors hover:bg-muted/50'}
 					>
 						<Table.Cell>{formatDateTime(row.inspectedAt)}</Table.Cell>
@@ -454,9 +455,7 @@
 						</Table.Cell>
 						<Table.Cell>{row.operatorName}</Table.Cell>
 						<Table.Cell class="text-center">
-							<Badge variant={row.overallStatus === 'OK' ? 'default' : 'destructive'}>
-								{row.overallStatus}
-							</Badge>
+							<StatusBadge status={row.overallStatus} />
 						</Table.Cell>
 						<Table.Cell class="text-end">
 							<Button
@@ -482,13 +481,19 @@
 						<Table.Row>
 							<Table.Cell colspan={8} class="p-0">
 								<div class="p-4">
-									<EmptyState
-										icon={InboxIcon}
-										title="Belum ada inspeksi"
-										description="Hasil inspeksi akan muncul di sini setelah operator melakukan pemeriksaan."
-									/>
-								</div>
-							</Table.Cell>
+									<Empty.Root>
+										<Empty.Media variant="icon">
+											<InboxIcon />
+										</Empty.Media>
+										<Empty.Header>
+											<Empty.Title>Belum ada inspeksi</Empty.Title>
+											<Empty.Description
+												>Hasil inspeksi akan muncul di sini setelah operator melakukan pemeriksaan.</Empty.Description
+											>
+										</Empty.Header>
+									</Empty.Root>
+								</div></Table.Cell
+							>
 						</Table.Row>
 					{/if}
 				{/each}
@@ -553,9 +558,7 @@
 					<div class="col-span-2">
 						<span class="text-muted-foreground">Overall</span>
 						<div class="mt-1">
-							<Badge variant={detail.overallStatus === 'OK' ? 'default' : 'destructive'}>
-								{detail.overallStatus}
-							</Badge>
+							<StatusBadge status={detail.overallStatus} />
 						</div>
 					</div>
 				</div>
@@ -572,9 +575,7 @@
 											<span class="text-xs text-muted-foreground">{point.remarks}</span>
 										{/if}
 									</div>
-									<Badge variant={point.status === 'OK' ? 'default' : 'destructive'}>
-										{point.status}
-									</Badge>
+									<StatusBadge status={point.status} />
 								</div>
 							{/each}
 						</div>
@@ -605,8 +606,7 @@
 											<span class="text-xs text-muted-foreground">{hw.remarks}</span>
 										{/if}
 									</div>
-									<Badge variant={hw.status === 'OK' ? 'default' : 'destructive'}>{hw.status}</Badge
-									>
+									<StatusBadge status={hw.status} />
 								</div>
 							{/each}
 						</div>
@@ -628,9 +628,7 @@
 											<span class="text-xs text-muted-foreground">{length.remarks}</span>
 										{/if}
 									</div>
-									<Badge variant={length.status === 'OK' ? 'default' : 'destructive'}>
-										{length.status}
-									</Badge>
+									<StatusBadge status={length.status} />
 								</div>
 							{/each}
 						</div>
@@ -642,9 +640,7 @@
 						<h3 class="font-semibold">Visual</h3>
 						<div class="flex items-start justify-between gap-3 rounded-lg border p-3">
 							<span class="text-xs text-muted-foreground">{detail.visualRemarks ?? '-'}</span>
-							<Badge variant={detail.visualStatus === 'OK' ? 'default' : 'destructive'}>
-								{detail.visualStatus}
-							</Badge>
+							<StatusBadge status={detail.visualStatus} />
 						</div>
 					</div>
 				{/if}

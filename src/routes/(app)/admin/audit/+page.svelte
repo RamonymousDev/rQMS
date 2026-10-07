@@ -11,7 +11,7 @@
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import PageHeader from '$lib/components/page-header.svelte';
-	import EmptyState from '$lib/components/empty-state.svelte';
+	import * as Empty from '$lib/components/ui/empty/index.js';
 	import PaginationFooter from '$lib/components/pagination-footer.svelte';
 	import InboxIcon from '@lucide/svelte/icons/inbox';
 	import { formatDateTime } from '$lib/format.js';
@@ -219,13 +219,19 @@
 						<Table.Row>
 							<Table.Cell colspan={6} class="p-0">
 								<div class="p-4">
-									<EmptyState
-										icon={InboxIcon}
-										title="Belum ada audit log"
-										description="Aktivitas pengguna akan tercatat di sini secara otomatis."
-									/>
-								</div>
-							</Table.Cell>
+									<Empty.Root>
+										<Empty.Media variant="icon">
+											<InboxIcon />
+										</Empty.Media>
+										<Empty.Header>
+											<Empty.Title>Belum ada audit log</Empty.Title>
+											<Empty.Description
+												>Aktivitas pengguna akan tercatat di sini secara otomatis.</Empty.Description
+											>
+										</Empty.Header>
+									</Empty.Root>
+								</div></Table.Cell
+							>
 						</Table.Row>
 					{/if}
 				{/each}

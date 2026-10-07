@@ -31,8 +31,8 @@
 	]);
 
 	function tileValueClass(tone: 'ng' | 'ok' | 'pending'): string {
-		if (tone === 'ng') return 'text-red-600 dark:text-red-400';
-		if (tone === 'ok') return 'text-green-600 dark:text-green-400';
+		if (tone === 'ng') return 'text-status-ng';
+		if (tone === 'ok') return 'text-status-ok';
 		return 'text-foreground';
 	}
 </script>

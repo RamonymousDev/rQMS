@@ -15,7 +15,7 @@
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import PageHeader from '$lib/components/page-header.svelte';
-	import EmptyState from '$lib/components/empty-state.svelte';
+	import * as Empty from '$lib/components/ui/empty/index.js';
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import InboxIcon from '@lucide/svelte/icons/inbox';
 
@@ -341,18 +341,23 @@
 						<Table.Row>
 							<Table.Cell colspan={5} class="p-0">
 								<div class="p-4">
-									<EmptyState
-										icon={InboxIcon}
-										title="Belum ada konfigurasi"
-										description="Tambahkan konfigurasi Part + Line untuk menentukan item inspeksi."
-									>
-										{#snippet action()}
-											<Button size="sm" onclick={openCreate}>
-												<PlusIcon class="size-4" />
-												Tambah
-											</Button>
-										{/snippet}
-									</EmptyState>
+									<Empty.Root>
+										<Empty.Media variant="icon">
+											<InboxIcon />
+										</Empty.Media>
+										<Empty.Header>
+											<Empty.Title>Belum ada konfigurasi</Empty.Title>
+											<Empty.Description
+												>Tambahkan konfigurasi Part + Line untuk menentukan item inspeksi.</Empty.Description
+											>
+											<Empty.Content>
+												<Button size="sm" onclick={openCreate}>
+													<PlusIcon class="size-4" />
+													Tambah
+												</Button>
+											</Empty.Content>
+										</Empty.Header>
+									</Empty.Root>
 								</div>
 							</Table.Cell>
 						</Table.Row>

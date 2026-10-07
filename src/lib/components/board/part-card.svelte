@@ -28,33 +28,28 @@
 	 * sebelum sempat membaca teks — penting untuk board yang dipindai cepat.
 	 */
 	const railClass = $derived(
-		overall === 'NG' ? 'bg-red-500' : overall === 'OK' ? 'bg-green-500' : 'bg-border'
+		overall === 'NG' ? 'bg-status-ng' : overall === 'OK' ? 'bg-status-ok' : 'bg-border'
 	);
 
 	const cardClass = $derived(
 		cn(
 			'flex overflow-hidden rounded-xl border bg-card shadow-sm transition-all',
-			hasNg
-				? 'border-red-300 ring-1 ring-red-500/20 dark:border-red-900/60'
-				: 'border-border hover:shadow-md'
+			hasNg ? 'border-status-ng/40 ring-1 ring-status-ng/25' : 'border-border hover:shadow-md'
 		)
 	);
 
 	const headerClass = $derived(
-		cn(
-			'flex items-center justify-between gap-3 px-5 py-4',
-			hasNg ? 'bg-red-50/60 dark:bg-red-950/20' : ''
-		)
+		cn('flex items-center justify-between gap-3 px-5 py-4', hasNg ? 'bg-status-ng-fill' : '')
 	);
 
 	const statusBadgeClass = $derived(
 		cn(
-			'rounded-full font-bold',
+			'rounded-full font-bold whitespace-nowrap',
 			tvMode ? 'px-3 py-1 text-sm' : 'px-2.5 py-0.5 text-xs',
 			overall === 'NG'
-				? 'bg-red-500 text-white'
+				? 'bg-status-ng text-white'
 				: overall === 'OK'
-					? 'bg-green-500 text-white'
+					? 'bg-status-ok text-white'
 					: 'bg-muted text-muted-foreground'
 		)
 	);
@@ -73,6 +68,11 @@
 					{part.partName}
 				</p>
 			</div>
+			<!--
+				Badge status: teksnya sudah menyebut statusnya ("OK"/"NG"), jadi
+				warna di sini adalah saluran cepat, bukan satu-satunya pembawa
+				informasi. `—` untuk shift/part yang belum punya data.
+			-->
 			<span class={statusBadgeClass}>{overall ?? '—'}</span>
 		</div>
 
@@ -93,7 +93,7 @@
 					class={cn(
 						'flex items-center justify-between gap-3 transition-colors',
 						tvMode ? 'px-4 py-4' : 'px-4 py-2.5',
-						shiftHasNg ? 'bg-red-50/40 dark:bg-red-950/10' : '',
+						shiftHasNg ? 'bg-status-ng-fill/50' : '',
 						isActive && !tvMode ? 'bg-primary/5' : '',
 						isActive && tvMode ? 'bg-amber-500/10' : ''
 					)}
@@ -103,7 +103,7 @@
 							class={cn(
 								'font-semibold tracking-wider uppercase',
 								tvMode ? 'text-xs' : 'text-[10px]',
-								shiftHasNg ? 'text-red-500' : 'text-muted-foreground'
+								shiftHasNg ? 'text-status-ng' : 'text-muted-foreground'
 							)}
 						>
 							{SHIFT_LABELS[shift]}

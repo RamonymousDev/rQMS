@@ -24,10 +24,23 @@ export type TrendPoint = {
 	total: number;
 };
 
+export type LineStatusPoint = {
+	lineCode: string;
+	ok: number;
+	ng: number;
+	total: number;
+	/** Waktu inspeksi terakhir di line ini; null = belum ada data. */
+	lastInspectedAt: string | null;
+	/** Status inspeksi TERAKHIR di line ini — menentukan warna kartu. */
+	latestStatus: 'OK' | 'NG' | null;
+};
+
 export type DashboardStats = {
 	totals: StatusCounts;
 	today: StatusCounts;
 	trend: TrendPoint[];
+	/** Status per line untuk hari operasional berjalan (kartu "Status per line"). */
+	lines: LineStatusPoint[];
 };
 
 const MONTHS_SHORT = [
@@ -51,6 +64,51 @@ function trendLabel(dateKey: string): string {
 	return `${day} ${MONTHS_SHORT[(month ?? 1) - 1]}`;
 }
 
+/**
+ * Status per line untuk satu rentang waktu.
+ *
+ * Warna kartu line ditentukan inspeksi TERAKHIR, bukan "pernah ada NG" —
+ * kalau sebuah line sudah kembali OK setelah re-check, line itu tidak boleh
+ * masih tampil merah. Urutan waktu ini sama dengan yang dipakai board.
+ *
+ * Memakai idx_inspection_line_code, jadi tidak menambah beban berarti.
+ */
+async function lineStatuses(where: SQL[]): Promise<LineStatusPoint[]> {
+	const rows = await db
+		.select({
+			lineCode: inspections.lineCode,
+			status: inspections.overallStatus,
+			inspectedAt: inspections.inspectedAt
+		})
+		.from(inspections)
+		.where(where.length ? and(...where) : undefined)
+		.orderBy(desc(inspections.inspectedAt));
+
+	const byLine = new Map<string, LineStatusPoint>();
+	for (const row of rows) {
+		const existing = byLine.get(row.lineCode);
+		if (!existing) {
+			// Baris pertama per line = inspeksi terbaru (sudah terurut desc).
+			const isOk = row.status === 'OK';
+			byLine.set(row.lineCode, {
+				lineCode: row.lineCode,
+				ok: isOk ? 1 : 0,
+				ng: isOk ? 0 : 1,
+				total: 1,
+				lastInspectedAt: row.inspectedAt.toISOString(),
+				latestStatus: row.status
+			});
+			continue;
+		}
+		if (row.status === 'OK') existing.ok += 1;
+		else existing.ng += 1;
+		existing.total += 1;
+	}
+
+	// Line paling aktif duluan — supervisor biasanya melihat line yang paling banyak bergerak.
+	return [...byLine.values()].sort((a, b) => b.total - a.total);
+}
+
 async function countByStatus(where: SQL[]): Promise<StatusCounts> {
 	const rows = await db
 		.select({ status: inspections.overallStatus, value: count() })
@@ -71,9 +129,10 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 	const now = new Date();
 	const { start, end } = getCurrentOperationalDayRange(now);
 
-	const [totals, today] = await Promise.all([
+	const [totals, today, lines] = await Promise.all([
 		countByStatus([]),
-		countByStatus([gte(inspections.inspectedAt, start), lt(inspections.inspectedAt, end)])
+		countByStatus([gte(inspections.inspectedAt, start), lt(inspections.inspectedAt, end)]),
+		lineStatuses([gte(inspections.inspectedAt, start), lt(inspections.inspectedAt, end)])
 	]);
 
 	const todayKey = getOperationalDate(now);
@@ -114,7 +173,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 		point.total += 1;
 	}
 
-	return { totals, today, trend: dates.map((date) => byDate.get(date)!) };
+	return { totals, today, trend: dates.map((date) => byDate.get(date)!), lines };
 }
 
 /** Inspeksi terbaru (snapshot kolom yang dipakai tabel dashboard). */

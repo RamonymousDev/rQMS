@@ -28,18 +28,23 @@
 
 	/**
 	 * Warna solid (bukan tint) supaya status tetap terbaca dari jarak jauh di TV
-	 * line produksi. NG diberi ring supaya menonjol lebih dulu dari OK.
+	 * line produksi. NG diberi ring tebal supaya menonjol lebih dulu dari OK.
+	 *
+	 * Catatan a11y: badge hanya menampilkan inisial stage (S/M/E), jadi warna
+	 * bukan satu-satunya pembeda OK/NG. Dua penanda lain: `aria-label` menyebut
+	 * statusnya secara eksplisit, dan NG memakai ring 4px sementara OK tidak —
+	 * bentuk, bukan hanya hue. Jangan samakan `badgeClass` OK dan NG.
 	 */
 	function badgeClass(status: StageStatus['status']): string {
-		if (status === 'OK') return 'border-green-500 bg-green-500 text-white shadow-sm';
+		if (status === 'OK') return 'border-status-ok bg-status-ok text-white shadow-sm';
 		if (status === 'NG')
-			return 'border-red-500 bg-red-500 text-white shadow-md ring-2 ring-red-500/30';
+			return 'border-status-ng bg-status-ng text-white shadow-md ring-4 ring-status-ng/35';
 		return 'border-dashed border-muted-foreground/40 bg-muted/50 text-muted-foreground/70';
 	}
 
 	function lineClass(status: StageStatus['status']): string {
-		if (status === 'OK') return 'bg-green-500';
-		if (status === 'NG') return 'bg-red-500';
+		if (status === 'OK') return 'bg-status-ok';
+		if (status === 'NG') return 'bg-status-ng';
 		return 'bg-border';
 	}
 
@@ -87,8 +92,10 @@
 					? 'h-14 w-14 text-lg sm:h-16 sm:w-16 sm:text-xl'
 					: 'h-9 w-9 text-xs sm:h-10 sm:w-10 sm:text-sm',
 				badgeClass(s.status),
+				// Hover memakai brightness + ring, bukan scale: transform mengubah batas
+				// layout sehingga badge bertabrakan dengan tetangganya dan bergetar.
 				hasData
-					? 'cursor-pointer hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none'
+					? 'cursor-pointer hover:brightness-110 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none'
 					: 'cursor-default'
 			)}
 			aria-label="{shift === 'DAY' ? 'Day' : 'Night'} shift — {STAGE_NAMES[stage]}: {s.status ??

@@ -6,6 +6,8 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
+	import * as Command from '$lib/components/ui/command/index.js';
+	import { ADMIN_PERMISSION } from '$lib/permissions.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
@@ -139,10 +141,94 @@
 		}
 	}
 
+	/* ------------------------------------------------------------------
+	 * Command palette (Ctrl/Cmd+K) + shortcut "N" untuk Mulai Inspeksi.
+	 * Keduanya global, tapi "N" diabaikan saat pengguna sedang mengetik
+	 * di field mana pun — tanpa guard itu, mengetik part number "N-something"
+	 * akan melempar operator keluar dari form.
+	 * ------------------------------------------------------------------ */
+	let paletteOpen = $state(false);
+
+	const isAdmin = $derived(data.permissionCodes.includes(ADMIN_PERMISSION));
+
+	const paletteActions = $derived([
+		{ id: 'inspect', label: 'Mulai Inspeksi', hint: 'N', href: resolve('/inspect'), group: 'Aksi' },
+		{ id: 'dashboard', label: 'Dashboard', href: resolve('/dashboard'), group: 'Navigasi' },
+		{
+			id: 'admin-inspections',
+			label: 'Hasil Inspeksi',
+			href: resolve('/admin/inspections'),
+			group: 'Monitoring'
+		},
+		{ id: 'admin-audit', label: 'Audit Log', href: resolve('/admin/audit'), group: 'Monitoring' },
+		...[
+			{ id: 'admin-lines', label: 'Line', href: resolve('/admin/lines'), group: 'Master Data' },
+			{ id: 'admin-parts', label: 'Part', href: resolve('/admin/parts'), group: 'Master Data' },
+			{
+				id: 'admin-hardwares',
+				label: 'Hardware',
+				href: resolve('/admin/hardwares'),
+				group: 'Master Data'
+			},
+			{ id: 'admin-users', label: 'User', href: resolve('/admin/users'), group: 'Master Data' },
+			{
+				id: 'admin-processes',
+				label: 'Process',
+				href: resolve('/admin/processes'),
+				group: 'Master Data'
+			},
+			{
+				id: 'admin-permissions',
+				label: 'Permission',
+				href: resolve('/admin/permissions'),
+				group: 'Master Data'
+			},
+			{
+				id: 'admin-configs',
+				label: 'Part + Line Config',
+				href: resolve('/admin/configs'),
+				group: 'Master Data'
+			}
+		].filter((action) => !action.id.startsWith('admin') || isAdmin)
+	]);
+
+	/** True saat fokus berada di field yang sedang diketik pengguna. */
+	function isTypingTarget(target: EventTarget | null): boolean {
+		if (!(target instanceof HTMLElement)) return false;
+		const tag = target.tagName;
+		return (
+			tag === 'INPUT' ||
+			tag === 'TEXTAREA' ||
+			tag === 'SELECT' ||
+			target.isContentEditable ||
+			target.closest('[contenteditable="true"]') !== null
+		);
+	}
+
 	function handleKeydown(e: KeyboardEvent) {
 		if ((e.metaKey || e.ctrlKey) && e.key === ',') {
 			e.preventDefault();
 			settingsOpen = !settingsOpen;
+			return;
+		}
+
+		if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+			e.preventDefault();
+			paletteOpen = !paletteOpen;
+			return;
+		}
+
+		// "N" hanya bila tidak ada modifier dan tidak sedang mengetik.
+		if (
+			e.key.toLowerCase() === 'n' &&
+			!e.metaKey &&
+			!e.ctrlKey &&
+			!e.altKey &&
+			!paletteOpen &&
+			!isTypingTarget(e.target)
+		) {
+			e.preventDefault();
+			goto(resolve('/inspect'));
 		}
 	}
 </script>
@@ -185,10 +271,10 @@
 				<DropdownMenu.Root bind:open={settingsOpen}>
 					<DropdownMenu.Trigger>
 						<div
-							class="inline-flex size-9 items-center justify-center rounded-md border border-input bg-background text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+							class="inline-flex size-9 cursor-pointer items-center justify-center rounded-md border border-input bg-background text-sm font-medium transition-colors duration-150 hover:bg-accent hover:text-accent-foreground"
 							aria-label="Settings"
 						>
-							<SettingsIcon class="size-4" />
+							<SettingsIcon class="size-4" aria-hidden="true" />
 						</div>
 					</DropdownMenu.Trigger>
 					<DropdownMenu.Content align="end" class="w-56">
@@ -210,13 +296,51 @@
 				</DropdownMenu.Root>
 			</div>
 		</header>
-		<div class="mx-auto flex w-full max-w-[1400px] flex-1 flex-col gap-5 p-4 lg:p-6">
+		<!--
+			Padding bawah diberi ruang ekstra karena halaman inspeksi punya sticky
+			submit footer; tanpa ini footer akan menutupi baris input terakhir.
+		-->
+		<div class="mx-auto flex w-full max-w-[1400px] flex-1 flex-col gap-5 p-4 pb-28 lg:p-6 lg:pb-28">
 			{@render children()}
 		</div>
 	</Sidebar.Inset>
 </Sidebar.Provider>
 
 <Toaster />
+
+<!-- Command palette: perpindahan halaman + aksi cepat -->
+<Command.Dialog
+	bind:open={paletteOpen}
+	title="Pindah halaman"
+	description="Ketik untuk mencari. Tekan Esc untuk menutup."
+	class="max-w-lg"
+>
+	<Command.Input placeholder="Cari halaman atau aksi…" />
+	<Command.List class="max-h-80">
+		<Command.Empty>Tidak ada hasil.</Command.Empty>
+		{#each ['Aksi', 'Navigasi', 'Monitoring', 'Master Data'] as group (group)}
+			{@const items = paletteActions.filter((action) => action.group === group)}
+			{#if items.length > 0}
+				<Command.Group heading={group}>
+					{#each items as action (action.id)}
+						<Command.Item
+							value={`${action.group} ${action.label}`}
+							onSelect={() => {
+								paletteOpen = false;
+								goto(action.href);
+							}}
+						>
+							<span>{action.label}</span>
+							{#if action.hint}
+								<Command.Shortcut>{action.hint}</Command.Shortcut>
+							{/if}
+						</Command.Item>
+					{/each}
+				</Command.Group>
+			{/if}
+		{/each}
+	</Command.List>
+</Command.Dialog>
 
 <Dialog.Root bind:open={changePasswordOpen}>
 	<Dialog.Content class="sm:max-w-md">
@@ -241,8 +365,9 @@
 					type="password"
 					bind:value={newPassword}
 					autocomplete="new-password"
+					aria-describedby="newPasswordHint"
 				/>
-				<p class="text-xs text-muted-foreground">
+				<p id="newPasswordHint" class="text-xs text-muted-foreground">
 					Min. 8 karakter, huruf besar, huruf kecil, angka, dan simbol.
 				</p>
 			</div>

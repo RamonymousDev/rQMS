@@ -6,7 +6,6 @@
 	import { useSidebar } from '$lib/components/ui/sidebar/context.svelte.js';
 	import type { SessionUser } from '$lib/server/auth.js';
 	import { ADMIN_PERMISSION } from '$lib/permissions.js';
-	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import LayoutDashboardIcon from '@lucide/svelte/icons/layout-dashboard';
@@ -119,24 +118,27 @@
 	<Sidebar.Header>
 		<div class="flex items-center gap-2.5 px-2 py-2">
 			<span
-				class="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted p-1 ring-1 ring-foreground/10"
+				class="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md ring-1 ring-border"
 			>
 				<img src="/adw.png" alt="" aria-hidden="true" class="h-full w-full object-contain" />
 			</span>
-			<span class="grid min-w-0 flex-1 gap-0.5 leading-none">
-				<span class="truncate text-sm font-bold tracking-tight">Q-JUN</span>
-				<span class="truncate text-[11px] text-muted-foreground">Quality System</span>
+			<span class="grid min-w-0 flex-1 gap-0.5 leading-none group-data-[collapsible=icon]:hidden">
+				<span class="truncate text-body font-semibold tracking-tight">Q-JUN</span>
+				<span class="truncate text-label text-muted-foreground">Quality System</span>
 			</span>
 		</div>
 	</Sidebar.Header>
-	<Sidebar.Content>
+	<Sidebar.Content class="py-1">
 		{#each navMain as group (group.title)}
-			<Sidebar.Group>
-				<Sidebar.GroupLabel class="text-xs font-medium text-sidebar-foreground/60">
+			<Sidebar.Group class="py-1">
+				<!-- Label grup: kecil, kapital, muted — penemu mata, bukan judul. -->
+				<Sidebar.GroupLabel
+					class="px-2 text-[11px] font-medium tracking-wider text-muted-foreground uppercase"
+				>
 					{group.title}
 				</Sidebar.GroupLabel>
 				<Sidebar.GroupContent>
-					<Sidebar.Menu>
+					<Sidebar.Menu class="gap-0.5">
 						{#each group.items as item (item.title)}
 							{@const Icon = getIcon(item.title)}
 							{@const isInspectionItem = item.title === 'Hasil Inspeksi'}
@@ -145,14 +147,16 @@
 								<Sidebar.MenuButton
 									isActive={active}
 									variant="default"
-									class="relative transition-colors duration-200"
+									size="sm"
+									class="relative h-9 transition-colors duration-150 [&>svg]:size-4"
 								>
 									{#snippet child({ props })}
 										<a href={item.url} {...props} onclick={handleNavClick}>
+											<!-- Penanda kiri: membedakan item aktif tanpa bergantung pada warna. -->
 											{#if active}
 												<span
 													aria-hidden="true"
-													class="absolute top-1/2 left-0 h-5 w-1 -translate-x-1 -translate-y-1/2 rounded-full bg-primary"
+													class="absolute top-1/2 left-0 h-4 w-0.5 -translate-x-1 -translate-y-1/2 rounded-full bg-primary"
 												></span>
 											{/if}
 											{#if Icon}
@@ -160,16 +164,28 @@
 											{/if}
 											<span class="truncate">{item.title}</span>
 											{#if isInspectionItem && ngInspectionCount > 0}
-												<Badge variant="destructive" class="ml-auto shrink-0">
-													<span class="relative flex size-1.5">
+												<!--
+														Badge NG memakai token status, bukan
+														variant="destructive": yang dihitung di sini
+														banyaknya inspeksi NG, bukan tindakan
+														berbahaya. Angka + pulse sudah membedakan
+														"ada NG" tanpa bergantung pada warna.
+													-->
+												<span
+													class="ml-auto flex shrink-0 items-center gap-1.5 rounded-full bg-status-ng-fill px-1.5 py-0.5 text-[11px] font-semibold text-status-ng"
+												>
+													<span class="relative flex size-1.5" aria-hidden="true">
 														<span
-															class="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75 motion-reduce:animate-none"
+															class="absolute inline-flex h-full w-full animate-ping rounded-full bg-status-ng opacity-75 motion-reduce:animate-none"
 														></span>
-														<span class="relative inline-flex size-1.5 rounded-full bg-white"
+														<span class="relative inline-flex size-1.5 rounded-full bg-status-ng"
 														></span>
 													</span>
-													{ngInspectionCount > 99 ? '99+' : ngInspectionCount}
-												</Badge>
+													<span class="tabular-nums">
+														{ngInspectionCount > 99 ? '99+' : ngInspectionCount}
+													</span>
+													<span class="sr-only">inspeksi NG perlu perhatian</span>
+												</span>
 											{/if}
 										</a>
 									{/snippet}
@@ -183,23 +199,21 @@
 	</Sidebar.Content>
 	<Sidebar.Footer>
 		<Separator class="mb-2" />
-		<div
-			class="flex items-center gap-2.5 rounded-lg bg-muted/50 px-2 py-2 ring-1 ring-foreground/5"
-		>
+		<div class="flex items-center gap-2.5 rounded-md px-2 py-2">
 			<span
 				aria-hidden="true"
-				class="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary"
+				class="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/12 text-[11px] font-semibold text-primary"
 			>
 				{initials}
 			</span>
-			<span class="grid min-w-0 flex-1 gap-0.5 leading-none">
-				<span class="truncate text-xs font-semibold">{user.name}</span>
+			<span class="grid min-w-0 flex-1 gap-0.5 leading-none group-data-[collapsible=icon]:hidden">
+				<span class="truncate text-label font-medium">{user.name}</span>
 				<span class="truncate font-mono text-[11px] text-muted-foreground">{user.nik}</span>
 			</span>
 			<Button
 				variant="ghost"
 				size="icon-sm"
-				class="shrink-0 cursor-pointer"
+				class="shrink-0 cursor-pointer group-data-[collapsible=icon]:hidden"
 				aria-label="Logout"
 				title="Logout"
 				onclick={() => onLogout?.()}

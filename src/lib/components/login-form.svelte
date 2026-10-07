@@ -45,6 +45,7 @@
 >
 	{#if form?.message}
 		<div
+			id="login-error-{id}"
 			role="alert"
 			class="flex items-start gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive ring-1 ring-destructive/20"
 		>
@@ -68,8 +69,10 @@
 					placeholder="e.g. OPR001"
 					autocomplete="username"
 					autocapitalize="characters"
+					inputmode="text"
 					spellcheck={false}
 					aria-invalid={hasError}
+					aria-describedby={hasError ? `login-error-{id}` : undefined}
 					class="pl-7"
 					required
 					disabled={pending}
@@ -89,6 +92,7 @@
 					type={showPassword ? 'text' : 'password'}
 					autocomplete="current-password"
 					aria-invalid={hasError}
+					aria-describedby={hasError ? `login-error-{id}` : undefined}
 					class="pr-10 pl-7"
 					required
 					disabled={pending}

@@ -23,6 +23,12 @@
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { QrScanner } from '$lib/components/ui/qr-scanner/index.js';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group/index.js';
+	import StatusBadge from '$lib/components/status-badge.svelte';
+	import { cn } from '$lib/utils.js';
+	import CheckIcon from '@lucide/svelte/icons/check';
+	import ClockIcon from '@lucide/svelte/icons/clock';
+	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
+	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 
 	type Line = { id: string; code: string; name: string; process?: { name: string } };
 
@@ -501,10 +507,13 @@
 		goto(resolve('/dashboard'));
 	}
 
+	// Status "terpilih" untuk tombol OK/NG manual (points & visual).
+	// Hijau/red TIDAK boleh dipakai sebagai warna brand di sini — warna ini
+	// reserved untuk status hasil inspeksi (lihat design-system/rqms/MASTER.md).
 	const okBtnClass =
-		'bg-green-600 text-white hover:bg-green-700 focus-visible:ring-green-500/50 dark:bg-green-600 dark:hover:bg-green-700';
+		'bg-status-ok text-white hover:bg-status-ok/90 focus-visible:ring-status-ok/50 border-status-ok';
 	const ngBtnClass =
-		'bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500/50 dark:bg-red-600 dark:hover:bg-red-700';
+		'bg-status-ng text-white hover:bg-status-ng/90 focus-visible:ring-status-ng/50 border-status-ng';
 
 	onDestroy(() => {
 		clearDraft();
@@ -514,80 +523,135 @@
 <svelte:window on:beforeunload={() => (isDirty ? '' : undefined)} />
 
 <div class="grid gap-4">
-	<Card>
-		<CardContent class="pt-6">
-			<div class="flex items-center justify-between">
-				{#each [1, 2, 3] as step (step)}
-					<div class="flex items-center gap-2">
-						<div
-							class="flex size-8 items-center justify-center rounded-full border-2 text-sm font-semibold"
-							class:border-primary={currentStep >= step}
-							class:bg-primary={currentStep >= step}
-							class:text-primary-foreground={currentStep >= step}
-							class:border-muted={currentStep < step}
-							class:text-muted-foreground={currentStep < step}
-						>
-							{step}
-						</div>
-						<span class="text-sm font-medium">
-							{step === 1 ? 'Pilih Line' : step === 2 ? 'Scan Part' : 'Isi Form'}
-						</span>
-					</div>
-					{#if step < 3}
-						<div
-							class="mx-2 h-0.5 flex-1"
-							class:bg-primary={currentStep > step}
-							class:bg-muted={currentStep <= step}
-						></div>
+	<!-- Stepper: sekarang fungsional — kartu di bawah hanya merender langkah aktif. -->
+	<ol class="flex items-center gap-2" aria-label="Tahapan inspeksi">
+		{#each [{ n: 1, label: 'Pilih Line' }, { n: 2, label: 'Scan Part' }, { n: 3, label: 'Isi Form' }] as step (step.n)}
+			<li class="flex min-w-0 items-center gap-2">
+				<span
+					aria-current={currentStep === step.n ? 'step' : undefined}
+					class={cn(
+						'flex size-8 shrink-0 items-center justify-center rounded-full border-2 text-sm font-semibold transition-colors duration-150',
+						currentStep >= step.n
+							? 'border-primary bg-primary text-primary-foreground'
+							: 'border-muted text-muted-foreground'
+					)}
+				>
+					{#if currentStep > step.n}
+						<CheckIcon class="size-4" aria-hidden="true" />
+					{:else}
+						{step.n}
 					{/if}
-				{/each}
-			</div>
-		</CardContent>
-	</Card>
-
-	<!-- Step 1: pilih line -->
-	<Card>
-		<CardHeader>
-			<CardTitle>1. Pilih Line</CardTitle>
-			<CardDescription>Hanya line yang sesuai permission Anda yang ditampilkan.</CardDescription>
-		</CardHeader>
-		<CardContent>
-			{#if loadingLines}
-				<div class="flex flex-wrap gap-2">
-					{#each [0, 1, 2, 3, 4, 5] as idx (idx)}
-						<Skeleton class="h-9 w-32" />
-					{/each}
-				</div>
-			{:else if lines.length === 0}
-				<p class="text-sm text-muted-foreground">
-					Tidak ada line yang bisa Anda akses. Hubungi admin untuk mendapatkan permission.
-				</p>
-			{:else}
-				<div class="flex flex-wrap gap-2">
-					{#each lines as line (line.id)}
-						<Button
-							variant={selectedLine?.id === line.id ? 'default' : 'outline'}
-							onclick={() => selectLine(line)}
-						>
-							{line.code} — {line.name}
-						</Button>
-					{/each}
-				</div>
+				</span>
+				<span
+					class={cn(
+						'truncate text-sm font-medium',
+						currentStep === step.n ? 'text-foreground' : 'text-muted-foreground'
+					)}
+				>
+					{step.label}
+				</span>
+			</li>
+			{#if step.n < 3}
+				<li class="h-0.5 min-w-4 flex-1" aria-hidden="true">
+					<div
+						class={cn(
+							'h-full rounded-full transition-colors duration-150',
+							currentStep > step.n ? 'bg-primary' : 'bg-muted'
+						)}
+					></div>
+				</li>
 			{/if}
-		</CardContent>
-	</Card>
+		{/each}
+	</ol>
 
-	<!-- Step 2 & 3: part + stage -->
-	{#if selectedLine}
+	<!--
+		Langkah 1 — pilih line.
+		Tombol full-width per line (bukan chip yang membungkus) supaya target
+		sentuhnya lebar dan operator tidak perlu membidik chip kecil di antara
+		banyak baris.
+	-->
+	{#if currentStep === 1}
 		<Card>
 			<CardHeader>
-				<CardTitle>2. Scan Part &amp; Pilih Stage</CardTitle>
-				<CardDescription class="flex items-center gap-2">
-					Line aktif: {selectedLine.code}
-					<Badge variant={activeShift === 'DAY' ? 'default' : 'secondary'} class="text-xs">
+				<CardTitle>1. Pilih Line</CardTitle>
+				<CardDescription>Hanya line yang sesuai permission Anda yang ditampilkan.</CardDescription>
+			</CardHeader>
+			<CardContent>
+				{#if loadingLines}
+					<div class="grid gap-2 sm:grid-cols-2">
+						{#each [0, 1, 2, 3] as idx (idx)}
+							<Skeleton class="h-14 w-full" />
+						{/each}
+					</div>
+				{:else if lines.length === 0}
+					<p class="text-sm text-muted-foreground">
+						Tidak ada line yang bisa Anda akses. Hubungi admin untuk mendapatkan permission.
+					</p>
+				{:else}
+					<div class="grid gap-2 sm:grid-cols-2">
+						{#each lines as line (line.id)}
+							{@const isSelected = selectedLine?.id === line.id}
+							<button
+								type="button"
+								aria-pressed={isSelected}
+								onclick={() => selectLine(line)}
+								class={cn(
+									'flex min-h-14 cursor-pointer items-center gap-3 rounded-lg border p-3 text-left transition-colors duration-150',
+									isSelected
+										? 'border-primary bg-primary/5 ring-1 ring-primary'
+										: 'border-input bg-background hover:bg-accent'
+								)}
+							>
+								<span
+									class={cn(
+										'flex size-9 shrink-0 items-center justify-center rounded-md font-mono text-sm font-bold',
+										isSelected
+											? 'bg-primary text-primary-foreground'
+											: 'bg-muted text-muted-foreground'
+									)}
+								>
+									{line.code}
+								</span>
+								<span class="min-w-0 flex-1">
+									<span class="block truncate text-sm font-medium">{line.name}</span>
+									{#if line.process?.name}
+										<span class="block truncate text-xs text-muted-foreground">
+											{line.process.name}
+										</span>
+									{/if}
+								</span>
+								{#if isSelected}
+									<CircleCheckIcon class="size-5 shrink-0 text-primary" aria-hidden="true" />
+								{/if}
+							</button>
+						{/each}
+					</div>
+				{/if}
+			</CardContent>
+		</Card>
+	{/if}
+
+	<!-- Langkah 2 — scan part & pilih stage -->
+	{#if currentStep === 2 && selectedLine}
+		<Card>
+			<CardHeader>
+				<div class="flex items-start justify-between gap-3">
+					<div class="min-w-0">
+						<CardTitle>2. Scan Part &amp; Pilih Stage</CardTitle>
+						<CardDescription>
+							Line aktif: <span class="font-mono font-medium">{selectedLine.code}</span>
+							· {selectedLine.name}
+						</CardDescription>
+					</div>
+					<!--
+						Shift dihitung server (WIB) dan dikirim lewat prepare — jangan
+						hitung di client, timezone browser operator bisa berbeda.
+					-->
+					<Badge variant={activeShift === 'DAY' ? 'secondary' : 'outline'} class="shrink-0 gap-1.5">
+						<ClockIcon class="size-3.5" aria-hidden="true" />
 						Shift {activeShift}
 					</Badge>
-				</CardDescription>
+				</div>
 			</CardHeader>
 			<CardContent class="grid gap-4">
 				<div class="grid gap-2">
@@ -647,40 +711,53 @@
 						<Input
 							id="partNo"
 							placeholder="Scan atau ketik part no..."
+							class="h-12 font-mono uppercase"
 							bind:value={partNo}
 							oninput={markDirty}
 						/>
 					{/if}
 				</div>
-				<div class="flex flex-wrap gap-2">
-					{#each STAGES as option (option)}
-						<Button
-							variant={stage === option ? 'default' : 'outline'}
-							disabled={preparing || !partNo.trim()}
-							onclick={() => prepare(option)}
-						>
-							{option}
-						</Button>
-					{/each}
-				</div>
-				{#if preparing}
-					<div class="flex items-center gap-2">
-						<Skeleton class="h-4 w-32" />
+				<div class="grid gap-1.5">
+					<Label for="stage">Stage</Label>
+					<div class="grid grid-cols-3 gap-2">
+						{#each STAGES as option (option)}
+							<Button
+								id="stage"
+								size="lg"
+								variant={stage === option ? 'default' : 'outline'}
+								disabled={preparing || !partNo.trim()}
+								onclick={() => prepare(option)}
+							>
+								{option}
+							</Button>
+						{/each}
 					</div>
-				{/if}
+					{#if preparing}
+						<p class="flex items-center gap-2 text-sm text-muted-foreground">
+							<Skeleton class="h-3.5 w-32" />
+							Memuat konfigurasi inspeksi…
+						</p>
+					{:else}
+						<p class="text-xs text-muted-foreground">
+							Pilih stage untuk memuat standar inspeksi. Stage yang sama pada shift berjalan yang
+							sudah <span class="font-medium text-foreground">OK</span> akan meminta konfirmasi re-check.
+						</p>
+					{/if}
+				</div>
 			</CardContent>
 		</Card>
 	{/if}
 
-	<!-- Step 4: form dinamis -->
-	{#if spec}
+	<!-- Langkah 3 — form dinamis -->
+	{#if currentStep === 3 && spec}
 		<Card>
 			<CardHeader>
 				<div class="flex items-start justify-between gap-4">
 					<div>
 						<CardTitle>3. Form Inspeksi</CardTitle>
 						<CardDescription>
-							{spec.partNo} — {spec.partName} · Line {spec.lineCode} · Stage {spec.stage} · Shift
+							<span class="font-mono">{spec.partNo}</span>
+							— {spec.partName} · Line {spec.lineCode} · Stage {spec.stage} · Shift
 							{spec.shift}
 						</CardDescription>
 					</div>
@@ -705,11 +782,13 @@
 										size="lg"
 										variant={pointAnswers[point.pointNo]?.status === 'OK' ? 'default' : 'outline'}
 										class={pointAnswers[point.pointNo]?.status === 'OK' ? okBtnClass : ''}
+										aria-pressed={pointAnswers[point.pointNo]?.status === 'OK'}
 										onclick={() => {
 											pointAnswers[point.pointNo].status = 'OK';
 											markDirty();
 										}}
 									>
+										<CircleCheckIcon class="size-5" aria-hidden="true" />
 										OK
 									</Button>
 									<Button
@@ -718,21 +797,33 @@
 											? 'destructive'
 											: 'outline'}
 										class={pointAnswers[point.pointNo]?.status === 'NG' ? ngBtnClass : ''}
+										aria-pressed={pointAnswers[point.pointNo]?.status === 'NG'}
 										onclick={() => {
 											pointAnswers[point.pointNo].status = 'NG';
 											markDirty();
 										}}
 									>
+										<TriangleAlertIcon class="size-5" aria-hidden="true" />
 										NG
 									</Button>
 								</div>
 								{#if pointAnswers[point.pointNo]?.status === 'NG'}
-									<Textarea
-										placeholder="Remarks wajib diisi..."
-										bind:value={pointAnswers[point.pointNo].remarks}
-										aria-invalid
-										class="bg-red-50 aria-invalid:border-b-destructive dark:bg-red-950/30"
-									/>
+									<div class="grid gap-1.5">
+										<Label
+											for="point-remark-{point.pointNo}"
+											class="flex items-center gap-1.5 text-status-ng"
+										>
+											<TriangleAlertIcon class="size-4" aria-hidden="true" />
+											Remarks wajib diisi
+										</Label>
+										<Textarea
+											id="point-remark-{point.pointNo}"
+											placeholder="Jelaskan temuan NG..."
+											bind:value={pointAnswers[point.pointNo].remarks}
+											aria-invalid={pointAnswers[point.pointNo].remarks.trim() === ''}
+											class="border-status-ng/50 bg-status-ng-fill focus-visible:ring-status-ng/40"
+										/>
+									</div>
 								{/if}
 							</div>
 						{/each}
@@ -748,20 +839,15 @@
 								<span class="text-sm text-muted-foreground">
 									Standard: {spec.spotStandard}
 								</span>
-								{#if statusFor(spotActual, spec.spotStandard ?? 0, 'exact')}
-									<Badge
-										variant={statusFor(spotActual, spec.spotStandard ?? 0, 'exact') === 'OK'
-											? 'default'
-											: 'destructive'}
-									>
-										{statusFor(spotActual, spec.spotStandard ?? 0, 'exact')}
-									</Badge>
-								{/if}
+								<StatusBadge status={statusFor(spotActual, spec.spotStandard ?? 0, 'exact')} />
 							</div>
 							<Input
 								type="number"
+								inputmode="decimal"
 								min="0"
 								placeholder="Actual"
+								class="h-12 tabular-nums"
+								aria-label="Nilai aktual spot"
 								bind:value={spotActual}
 								oninput={markDirty}
 							/>
@@ -779,30 +865,42 @@
 								hw.standardValue
 							)}
 							<div class="grid gap-2 rounded-lg border p-3">
-								<div class="flex items-center justify-between gap-3">
-									<span class="text-sm font-medium">{hw.hwNo} — {hw.hwName}</span>
-									{#if status}
-										<Badge variant={status === 'OK' ? 'default' : 'destructive'}>{status}</Badge>
-									{/if}
+								<div class="flex flex-wrap items-center gap-2">
+									<span class="font-mono text-sm font-medium">{hw.hwNo}</span>
+									<span class="text-sm text-muted-foreground">{hw.hwName}</span>
+									<StatusBadge {status} class="ml-auto shrink-0" />
 								</div>
 								<span class="text-sm text-muted-foreground">
-									Standard: {hw.standardValue}
+									Standard: <span class="tabular-nums">{hw.standardValue}</span>
 									{hw.unit}
 								</span>
 								<Input
 									type="number"
+									inputmode="decimal"
 									min="0"
 									placeholder={`Actual (${hw.unit})`}
+									class="h-12 tabular-nums"
+									aria-label={`Nilai aktual hardware ${hw.hwNo}`}
 									bind:value={hardwareAnswers[hw.hardwareId].actualValue}
 									oninput={markDirty}
 								/>
 								{#if status === 'NG'}
-									<Textarea
-										placeholder="Remarks wajib diisi..."
-										bind:value={hardwareAnswers[hw.hardwareId].remarks}
-										aria-invalid
-										class="bg-red-50 aria-invalid:border-b-destructive dark:bg-red-950/30"
-									/>
+									<div class="grid gap-1.5">
+										<Label
+											for="hw-remark-{hw.hardwareId}"
+											class="flex items-center gap-1.5 text-status-ng"
+										>
+											<TriangleAlertIcon class="size-4" aria-hidden="true" />
+											Remarks wajib diisi
+										</Label>
+										<Textarea
+											id="hw-remark-{hw.hardwareId}"
+											placeholder="Jelaskan temuan NG..."
+											bind:value={hardwareAnswers[hw.hardwareId].remarks}
+											aria-invalid={hardwareAnswers[hw.hardwareId].remarks.trim() === ''}
+											class="border-status-ng/50 bg-status-ng-fill focus-visible:ring-status-ng/40"
+										/>
+									</div>
 								{/if}
 							</div>
 						{/each}
@@ -820,29 +918,40 @@
 								'exact'
 							)}
 							<div class="grid gap-2 rounded-lg border p-3">
-								<div class="flex items-center justify-between gap-3">
-									<span class="text-sm font-medium">{length.lengthNo}</span>
-									{#if status}
-										<Badge variant={status === 'OK' ? 'default' : 'destructive'}>{status}</Badge>
-									{/if}
+								<div class="flex flex-wrap items-center gap-2">
+									<span class="font-mono text-sm font-medium">{length.lengthNo}</span>
+									<StatusBadge {status} class="ml-auto shrink-0" />
 								</div>
 								<span class="text-sm text-muted-foreground">
-									Standard: {length.standardMm} mm
+									Standard: <span class="tabular-nums">{length.standardMm}</span> mm
 								</span>
 								<Input
 									type="number"
+									inputmode="decimal"
 									min="0"
 									placeholder="Actual (mm)"
+									class="h-12 tabular-nums"
+									aria-label={`Nilai aktual panjang ${length.lengthNo}`}
 									bind:value={lengthAnswers[length.lengthNo].actualMm}
 									oninput={markDirty}
 								/>
 								{#if status === 'NG'}
-									<Textarea
-										placeholder="Remarks wajib diisi..."
-										bind:value={lengthAnswers[length.lengthNo].remarks}
-										aria-invalid
-										class="bg-red-50 aria-invalid:border-b-destructive dark:bg-red-950/30"
-									/>
+									<div class="grid gap-1.5">
+										<Label
+											for="len-remark-{length.lengthNo}"
+											class="flex items-center gap-1.5 text-status-ng"
+										>
+											<TriangleAlertIcon class="size-4" aria-hidden="true" />
+											Remarks wajib diisi
+										</Label>
+										<Textarea
+											id="len-remark-{length.lengthNo}"
+											placeholder="Jelaskan temuan NG..."
+											bind:value={lengthAnswers[length.lengthNo].remarks}
+											aria-invalid={lengthAnswers[length.lengthNo].remarks.trim() === ''}
+											class="border-status-ng/50 bg-status-ng-fill focus-visible:ring-status-ng/40"
+										/>
+									</div>
 								{/if}
 							</div>
 						{/each}
@@ -859,32 +968,43 @@
 									size="lg"
 									variant={visualStatus === 'OK' ? 'default' : 'outline'}
 									class={visualStatus === 'OK' ? okBtnClass : ''}
+									aria-pressed={visualStatus === 'OK'}
 									onclick={() => {
 										visualStatus = 'OK';
 										markDirty();
 									}}
 								>
+									<CircleCheckIcon class="size-5" aria-hidden="true" />
 									OK
 								</Button>
 								<Button
 									size="lg"
 									variant={visualStatus === 'NG' ? 'destructive' : 'outline'}
 									class={visualStatus === 'NG' ? ngBtnClass : ''}
+									aria-pressed={visualStatus === 'NG'}
 									onclick={() => {
 										visualStatus = 'NG';
 										markDirty();
 									}}
 								>
+									<TriangleAlertIcon class="size-5" aria-hidden="true" />
 									NG
 								</Button>
 							</div>
 							{#if visualStatus === 'NG'}
-								<Textarea
-									placeholder="Remarks wajib diisi..."
-									bind:value={visualRemarks}
-									aria-invalid
-									class="bg-red-50 aria-invalid:border-b-destructive dark:bg-red-950/30"
-								/>
+								<div class="grid gap-1.5">
+									<Label for="visual-remark" class="flex items-center gap-1.5 text-status-ng">
+										<TriangleAlertIcon class="size-4" aria-hidden="true" />
+										Remarks wajib diisi
+									</Label>
+									<Textarea
+										id="visual-remark"
+										placeholder="Jelaskan temuan NG..."
+										bind:value={visualRemarks}
+										aria-invalid={visualRemarks.trim() === ''}
+										class="border-status-ng/50 bg-status-ng-fill focus-visible:ring-status-ng/40"
+									/>
+								</div>
 							{/if}
 						</div>
 					</div>
@@ -896,8 +1016,8 @@
 	{/if}
 </div>
 
-<!-- Sticky submit footer — muncul hanya saat form aktif -->
-{#if spec}
+<!-- Footer lengket — hanya saat langkah 3 (form aktif) -->
+{#if currentStep === 3 && spec}
 	<div
 		class="fixed inset-x-0 bottom-0 z-10 border-t bg-background/95 px-4 py-3 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/80"
 	>
@@ -911,15 +1031,15 @@
 				</div>
 				<span
 					class={progress.pct === 100
-						? 'text-xs font-semibold text-green-600'
-						: 'text-xs text-muted-foreground'}
+						? 'text-xs font-semibold text-status-ok tabular-nums'
+						: 'text-xs text-muted-foreground tabular-nums'}
 				>
 					{progress.pct}%
 				</span>
 			</div>
 			<Progress
 				value={progress.pct}
-				class={progress.pct === 100 ? 'h-1.5 [&>div]:bg-green-500' : 'h-1.5'}
+				class={progress.pct === 100 ? 'h-1.5 [&>div]:bg-status-ok' : 'h-1.5'}
 			/>
 			<div class="mt-3 flex gap-2">
 				<Button
