@@ -1,4 +1,11 @@
 {
 	"$schema": "https://opencode.ai/config.json",
-	"plugin": ["@sveltejs/opencode"]
+	"plugin": ["@sveltejs/opencode"],
+	"mcp": {
+		"cladd": {
+			"type": "remote",
+			"url": "https://cladd.io/mcp",
+			"enabled": true
+		}
+	}
 }
