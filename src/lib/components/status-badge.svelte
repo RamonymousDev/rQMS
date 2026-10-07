@@ -34,7 +34,7 @@
 
 	// Normalisasi supaya pemanggil boleh mengirim 'OK' maupun 'ok'.
 	const resolved = $derived<Status>(
-		status === 'ok'
+		status === 'ok' || status === 'OK'
 			? 'OK'
 			: status === 'ng' || status === 'NG'
 				? 'NG'
