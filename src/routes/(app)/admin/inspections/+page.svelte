@@ -45,11 +45,14 @@
 		operator?: { nik: string; name: string };
 		points: { pointNo: string; status: 'OK' | 'NG'; remarks: string | null }[];
 		hardwares: {
+			id: string;
 			hwNo: string;
 			hwName: string;
 			standardValue: number;
 			unit: string;
 			actualValue: number;
+			checkType: 'TORQUE' | 'HAMMER' | null;
+			checkNo: number;
 			status: 'OK' | 'NG';
 			remarks: string | null;
 		}[];
@@ -593,10 +596,13 @@
 					<div class="grid gap-2">
 						<h3 class="font-semibold">Hardwares</h3>
 						<div class="grid gap-2">
-							{#each detail.hardwares as hw (hw.hwNo)}
+							{#each detail.hardwares as hw (hw.id)}
 								<div class="flex items-start justify-between gap-3 rounded-lg border p-3">
 									<div class="grid">
-										<span class="font-medium">{hw.hwNo} — {hw.hwName}</span>
+										<span class="font-medium">
+											{hw.hwNo} ({hw.hwName}) {#if hw.checkType}
+												{hw.checkType === 'TORQUE' ? 'Torque' : 'Hammer'} #{hw.checkNo}{/if}
+										</span>
 										<span class="text-xs text-muted-foreground">
 											Standard {hw.standardValue}
 											{hw.unit} · Actual {hw.actualValue}

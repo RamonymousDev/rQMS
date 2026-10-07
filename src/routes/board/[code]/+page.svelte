@@ -497,12 +497,15 @@
 													>
 														Hardwares
 													</p>
-													{#each row.hardwares as hw (hw.hwNo)}
+													{#each row.hardwares as hw (hw.id)}
 														<div
 															class="flex items-start justify-between gap-3 rounded border bg-background px-3 py-1.5"
 														>
 															<div class="grid">
-																<span class="text-xs">{hw.hwNo} — {hw.hwName}</span>
+																<span class="text-xs">
+																	{hw.hwNo} ({hw.hwName}) {#if hw.checkType}
+																		{hw.checkType === 'TORQUE' ? 'Torque' : 'Hammer'} #{hw.checkNo}{/if}
+																</span>
 																<span class="text-xs text-muted-foreground">
 																	Std {hw.standardValue}
 																	{hw.unit} · Actual {hw.actualValue}

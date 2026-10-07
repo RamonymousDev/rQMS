@@ -12,6 +12,12 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import Combobox from '$lib/components/combobox.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
+	import {
+		Select,
+		SelectContent,
+		SelectItem,
+		SelectTrigger
+	} from '$lib/components/ui/select/index.js';
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import PageHeader from '$lib/components/page-header.svelte';
@@ -36,6 +42,8 @@
 		points: { pointNo: string; sequence: number }[];
 		hardwares: {
 			hardwareId: string;
+			checkType: 'TORQUE' | 'HAMMER';
+			qty: number;
 			standardValue: number;
 			unit: string;
 			sequence: number;
@@ -63,7 +71,13 @@
 	let hasPoint = $state(false);
 	let points: { pointNo: string }[] = $state([]);
 	let hasHardware = $state(false);
-	let hardwareRows: { hardwareId: string; standardValue: string; unit: string }[] = $state([]);
+	let hardwareRows: {
+		hardwareId: string;
+		checkType: 'TORQUE' | 'HAMMER';
+		qty: string;
+		standardValue: string;
+		unit: string;
+	}[] = $state([]);
 	let hasLength = $state(false);
 	let lengths: { lengthNo: string; standardMm: string }[] = $state([]);
 	let hasVisual = $state(false);
@@ -157,6 +171,8 @@
 		hasHardware = row.hasHardware;
 		hardwareRows = row.hardwares.map((h) => ({
 			hardwareId: h.hardwareId,
+			checkType: h.checkType,
+			qty: String(h.qty),
 			standardValue: String(h.standardValue),
 			unit: h.unit
 		}));
@@ -219,6 +235,8 @@
 			hardwares: hasHardware
 				? hardwareRows.map((h, i) => ({
 						hardwareId: h.hardwareId,
+						checkType: h.checkType,
+						qty: toNumber(h.qty),
 						standardValue: toNumber(h.standardValue),
 						unit: h.unit,
 						sequence: i
@@ -473,7 +491,7 @@
 					{#if hasHardware}
 						<div class="grid gap-2">
 							{#each hardwareRows as hw, i (i)}
-								<div class="grid gap-2 sm:grid-cols-[2fr_1fr_1fr_auto] sm:items-center">
+								<div class="grid gap-2 sm:grid-cols-[2fr_1fr_0.7fr_1fr_1fr_auto] sm:items-center">
 									<Combobox
 										options={hardwareOptions}
 										bind:value={hw.hardwareId}
@@ -481,6 +499,16 @@
 										searchPlaceholder="Cari hw no / nama..."
 										emptyText="Hardware tidak ditemukan."
 									/>
+									<Select type="single" bind:value={hw.checkType}>
+										<SelectTrigger class="w-full">
+											<span>{hw.checkType === 'TORQUE' ? 'Torque' : 'Hammer'}</span>
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="TORQUE">Torque</SelectItem>
+											<SelectItem value="HAMMER">Hammer</SelectItem>
+										</SelectContent>
+									</Select>
+									<Input type="number" min="1" max="20" placeholder="QTY" bind:value={hw.qty} />
 									<Input
 										type="number"
 										min="0"
@@ -506,7 +534,7 @@
 								onclick={() =>
 									(hardwareRows = [
 										...hardwareRows,
-										{ hardwareId: '', standardValue: '', unit: '' }
+										{ hardwareId: '', checkType: 'TORQUE', qty: '1', standardValue: '', unit: '' }
 									])}
 							>
 								<PlusIcon class="size-4" />

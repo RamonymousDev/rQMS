@@ -20,6 +20,8 @@ import { relations } from 'drizzle-orm';
 export const stageEnum = pgEnum('stage', ['START', 'MIDDLE', 'END']);
 export const shiftEnum = pgEnum('shift', ['DAY', 'NIGHT']);
 export const okNgEnum = pgEnum('ok_ng', ['OK', 'NG']);
+/** Tipe pengecekan hardware — keduanya numerik dengan aturan actual >= standard. */
+export const checkTypeEnum = pgEnum('check_type', ['TORQUE', 'HAMMER']);
 
 // ======================
 // MASTER: PERMISSIONS
@@ -196,6 +198,10 @@ export const partLineHardwares = pgTable(
 		hardwareId: uuid('hardware_id')
 			.notNull()
 			.references(() => hardwares.id),
+		// Tipe pengecekan + jumlah titik yang diperiksa dengan hardware ini.
+		// Standard & unit dipakai bersama oleh semua titik (qty).
+		checkType: checkTypeEnum('check_type').notNull().default('TORQUE'),
+		qty: integer('qty').default(1).notNull(),
 		standardValue: integer('standard_value').notNull(),
 		unit: varchar('unit', { length: 20 }).notNull(), // "kgf", "mm", dll (bebas)
 		sequence: integer('sequence').default(0).notNull()
@@ -302,6 +308,10 @@ export const inspectionHardwares = pgTable(
 			.references(() => inspections.id, { onDelete: 'cascade' }),
 		hwNo: varchar('hw_no', { length: 50 }).notNull(), // snapshot
 		hwName: varchar('hw_name', { length: 100 }).notNull(), // snapshot
+		// Snapshot tipe & nomor titik. checkType null untuk inspeksi lama
+		// (sebelum fitur tipe pengecekan) — jangan dipalsukan saat menampilkan.
+		checkType: checkTypeEnum('check_type'),
+		checkNo: integer('check_no').default(1).notNull(),
 		standardValue: integer('standard_value').notNull(), // snapshot
 		unit: varchar('unit', { length: 20 }).notNull(),
 		actualValue: integer('actual_value').notNull(),

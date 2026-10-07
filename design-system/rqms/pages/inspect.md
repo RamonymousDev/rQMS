@@ -28,6 +28,8 @@ Do not merge steps. Do not add cross-step shortcuts that bypass `prepare`.
 ## Numeric entry
 
 - Hardware and length inputs: `inputmode="decimal"` / `inputmode="numeric"`.
+- Satu hardware dapat memiliki beberapa titik pengecekan (`qty`); setiap titik punya input Actual + badge
+  sendiri dengan label `hwNo (hwName) Tipe #nomor`, tetapi memakai Standard/Unit yang sama.
 - Values render with `tabular-nums` so the operator can compare actual vs standard at a glance.
 - Standard value is read-only and always shown next to the input. The operator never types a standard —
   standards come from the config and are evaluated server-side.

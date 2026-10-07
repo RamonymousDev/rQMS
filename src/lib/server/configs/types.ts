@@ -11,6 +11,12 @@ const pointSchema = z.object({
 
 const hardwareSchema = z.object({
 	hardwareId: z.uuid('Hardware tidak valid'),
+	checkType: z.enum(['TORQUE', 'HAMMER'], { message: 'Tipe pengecekan hanya TORQUE / HAMMER.' }),
+	qty: z
+		.number()
+		.int('QTY harus bilangan bulat')
+		.min(1, 'QTY minimal 1')
+		.max(20, 'QTY maksimal 20'),
 	standardValue: z
 		.number()
 		.int('Standard value harus bilangan bulat')
@@ -134,6 +140,8 @@ export function normalizeConfig(data: ConfigItems) {
 		hardwares: data.hasHardware
 			? data.hardwares.map((h, i) => ({
 					hardwareId: h.hardwareId,
+					checkType: h.checkType,
+					qty: h.qty,
 					standardValue: h.standardValue,
 					unit: h.unit,
 					sequence: h.sequence ?? i

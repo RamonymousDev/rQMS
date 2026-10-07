@@ -70,12 +70,12 @@ User hanya boleh mengakses Line jika dia memiliki permission tersebut.
 
 ### 3.2 Konfigurasi Part + Line
 
-| Table                 | Isi Utama                                                                                  |
-| --------------------- | ------------------------------------------------------------------------------------------ |
-| `part_line_configs`   | part_id, line_id, has_spot, spot_standard, has_point, has_hardware, has_length, has_visual |
-| `part_line_points`    | part_line_config_id, point_no, sequence                                                    |
-| `part_line_hardwares` | part_line_config_id, hardware_id, **standard_value**, unit, sequence                       |
-| `part_line_lengths`   | part_line_config_id, length_no, standard_mm, sequence                                      |
+| Table                 | Isi Utama                                                                                                     |
+| --------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `part_line_configs`   | part_id, line_id, has_spot, spot_standard, has_point, has_hardware, has_length, has_visual                    |
+| `part_line_points`    | part_line_config_id, point_no, sequence                                                                       |
+| `part_line_hardwares` | part_line_config_id, hardware_id, **check_type** (TORQUE/HAMMER), **qty**, **standard_value**, unit, sequence |
+| `part_line_lengths`   | part_line_config_id, length_no, standard_mm, sequence                                                         |
 
 > **Penting:** Standard hardware dan length ditentukan di level **Part + Line Config**, bukan di master Hardware.
 
@@ -85,7 +85,7 @@ User hanya boleh mengakses Line jika dia memiliki permission tersebut.
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `inspections`          | part_line_config_id, part_no, line_code, stage, shift, overall_status, spot_actual, visual_status, visual_remarks, operator_id, operator_name, inspected_at |
 | `inspection_points`    | inspection_id, point_no, status, remarks                                                                                                                    |
-| `inspection_hardwares` | inspection_id, hw_no, hw_name, standard_value, unit, actual_value, status, remarks                                                                          |
+| `inspection_hardwares` | inspection_id, hw_no, hw_name, check_type, check_no, standard_value, unit, actual_value, status, remarks                                                    |
 | `inspection_lengths`   | inspection_id, length_no, standard_mm, actual_mm, status, remarks                                                                                           |
 
 Semua nilai penting di transaksi disimpan sebagai **snapshot** agar history tetap akurat meski master berubah.
@@ -144,13 +144,13 @@ Ini adalah langkah paling penting.
 3. Sistem cek apakah kombinasi Part + Line sudah ada (unique).
 4. Admin mengatur flag dan detail:
 
-| Flag           | Jika Aktif (true)                                      | Jika Nonaktif (false) |
-| -------------- | ------------------------------------------------------ | --------------------- |
-| `has_spot`     | Wajib isi `spot_standard` (qty)                        | Abaikan               |
-| `has_point`    | Tambah daftar Point (`point_no` + sequence)            | Abaikan               |
-| `has_hardware` | Tambah Hardware + **standard_value** + unit + sequence | Abaikan               |
-| `has_length`   | Tambah Length (bisa 1 atau lebih) + `standard_mm`      | Abaikan               |
-| `has_visual`   | Hanya flag (hasil nanti OK/NG)                         | Abaikan               |
+| Flag           | Jika Aktif (true)                                                      | Jika Nonaktif (false) |
+| -------------- | ---------------------------------------------------------------------- | --------------------- |
+| `has_spot`     | Wajib isi `spot_standard` (qty)                                        | Abaikan               |
+| `has_point`    | Tambah daftar Point (`point_no` + sequence)                            | Abaikan               |
+| `has_hardware` | Tambah Hardware + **check_type** + **qty** + **standard_value** + unit | Abaikan               |
+| `has_length`   | Tambah Length (bisa 1 atau lebih) + `standard_mm`                      | Abaikan               |
+| `has_visual`   | Hanya flag (hasil nanti OK/NG)                                         | Abaikan               |
 
 5. Simpan konfigurasi.
 6. Konfigurasi siap dipakai Operator.
@@ -244,10 +244,11 @@ Untuk setiap point:
 
 Untuk setiap hardware di config:
 
-- Tampilkan `hw_no`, `hw_name`, `standard_value`, `unit`
-- Input: `actual_value` (integer)
-- Sistem otomatis tentukan status: `actual >= standard` → OK, else NG
-- Jika NG → **wajib** Remarks
+- Tampilkan `hw_no`, `hw_name`, `check_type` (Torque/Hammer), `standard_value`, `unit`
+- Satu hardware punya `qty` titik pengecekan (`check_no` 1..qty); semua titik memakai `standard_value` + `unit` yang sama
+- Input: `actual_value` (integer) per titik — label `hw_no (hw_name) Tipe #check_no`
+- Sistem otomatis tentukan status per titik: `actual >= standard` → OK, else NG
+- Jika ada titik NG → **wajib** Remarks untuk titik tersebut
 
 #### D. Lengths (jika `has_length = true`)
 
@@ -255,7 +256,7 @@ Untuk setiap length:
 
 - Tampilkan `length_no` + `standard_mm`
 - Input: `actual_mm`
-- Status: `actual === standard` → OK, else NG (wajib exact)
+- Sistem otomatis tentukan status: `actual >= standard` → OK, else NG
 - Jika NG → **wajib** Remarks
 
 #### E. Visual (jika `has_visual = true`)
@@ -289,7 +290,7 @@ Item yang dihitung:
    - `spot_actual`, `visual_status`, `visual_remarks`
 4. Insert detail:
    - `inspection_points`
-   - `inspection_hardwares` (snapshot `hw_no`, `hw_name`, `standard_value`, `unit`)
+   - `inspection_hardwares` (snapshot `hw_no`, `hw_name`, `check_type`, `check_no`, `standard_value`, `unit`)
    - `inspection_lengths` (snapshot `length_no`, `standard_mm`)
 5. Return sukses.
 
@@ -307,7 +308,7 @@ Item yang dihitung:
 | 6   | Part harus sudah dikonfigurasi di Line sebelum bisa diinspeksi | Backend              |
 | 7   | Standard hardware & length diambil dari Part+Line Config       | Backend              |
 | 8   | Semua nilai penting di transaksi disimpan sebagai snapshot     | Backend              |
-| 9   | Actual >= Standard → OK (untuk Spot, Hardware, Length)         | Backend              |
+| 9   | Actual >= Standard → OK (Hardware, Length); Spot wajib exact   | Backend              |
 | 10  | Stage hanya: START / MIDDLE / END                              | Backend + Frontend   |
 
 ---
@@ -333,7 +334,7 @@ Item yang dihitung:
 ### Fase 3 – Konfigurasi Part + Line
 
 1. Create / Update Part+Line Config
-2. Manage Points, Hardwares (dengan standard), Lengths
+2. Manage Points, Hardwares (tipe pengecekan + qty + standard), Lengths
 3. Validasi flag vs detail (contoh: `has_point = true` harus punya minimal 1 point)
 
 ### Fase 4 – Operator Inspection
@@ -365,7 +366,7 @@ Item yang dihitung:
 7. Konfigurasi Part `64300` + Line `RSW`:
    - Spot standard 12
    - Point 1, 2, 3
-   - Hardware 12911 (50 kgf), 13900 (5 mm)
+   - Hardware 12911 Torque qty 1 (50 kgf), 13900 Hammer qty 1 (5 mm)
    - Length 1 (120 mm), Length 2 (85 mm)
    - Visual aktif
 

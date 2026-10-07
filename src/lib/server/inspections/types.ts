@@ -39,7 +39,9 @@ export const submitSchema = z.object({
 	hardwares: z
 		.array(
 			z.object({
-				hardwareId: z.uuid('Hardware tidak valid'),
+				/** `part_line_hardwares.id` — hardware + titik pengecekan (checkNo). */
+				id: z.uuid('Hardware tidak valid'),
+				checkNo: z.number().int('Nomor titik harus bilangan bulat').min(1),
 				actualValue: z.number().int('Actual value harus bilangan bulat').min(0),
 				remarks: z.string().trim().nullable().optional()
 			})
@@ -62,7 +64,7 @@ export const submitSchema = z.object({
 
 export type SubmitInput = z.infer<typeof submitSchema>;
 
-/** Status per aturan bisnis. mode 'min' = actual >= standard (Hardware), 'exact' = actual === standard (Spot, Length). */
+/** Status per aturan bisnis. mode 'min' = actual >= standard (Hardware, Length), 'exact' = actual === standard (Spot). */
 export function statusFor(
 	actual: number,
 	standard: number,

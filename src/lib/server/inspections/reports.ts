@@ -114,7 +114,7 @@ export async function getInspection(id: string) {
 		where: (i, { eq }) => eq(i.id, id),
 		with: {
 			points: { orderBy: (p) => [asc(p.pointNo)] },
-			hardwares: { orderBy: (h) => [asc(h.hwNo)] },
+			hardwares: { orderBy: (h) => [asc(h.hwNo), asc(h.checkNo)] },
 			lengths: { orderBy: (l) => [asc(l.lengthNo)] },
 			operator: { columns: { id: true, nik: true, name: true } }
 		}

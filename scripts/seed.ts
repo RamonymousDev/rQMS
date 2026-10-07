@@ -104,7 +104,13 @@ async function assignPermissions(userId: string, permissionIds: string[]) {
 async function getOrCreateConfig(
 	partId: string,
 	lineId: string,
-	hardwareStandards: { hardwareId: string; standardValue: number; unit: string }[]
+	hardwareStandards: {
+		hardwareId: string;
+		checkType: 'TORQUE' | 'HAMMER';
+		qty: number;
+		standardValue: number;
+		unit: string;
+	}[]
 ) {
 	const existing = await db.query.partLineConfigs.findFirst({
 		where: (c, { and, eq }) => and(eq(c.partId, partId), eq(c.lineId, lineId))
@@ -173,8 +179,8 @@ await assignPermissions(userAdmin.id, [permissionAdmin.id, permissionRswCheck.id
 await assignPermissions(userOpr.id, [permissionRswCheck.id]);
 
 const { created: configCreated } = await getOrCreateConfig(part64300.id, lineRsw.id, [
-	{ hardwareId: hardwareBolt.id, standardValue: 50, unit: 'kgf' },
-	{ hardwareId: hardwareNugget.id, standardValue: 5, unit: 'mm' }
+	{ hardwareId: hardwareBolt.id, checkType: 'TORQUE', qty: 1, standardValue: 50, unit: 'kgf' },
+	{ hardwareId: hardwareNugget.id, checkType: 'HAMMER', qty: 1, standardValue: 5, unit: 'mm' }
 ]);
 
 console.log('Seed selesai:');

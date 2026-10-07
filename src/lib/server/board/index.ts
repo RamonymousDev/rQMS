@@ -233,8 +233,11 @@ export async function getInspectionHistory(
 			points: { columns: { pointNo: true, status: true, remarks: true } },
 			hardwares: {
 				columns: {
+					id: true,
 					hwNo: true,
 					hwName: true,
+					checkType: true,
+					checkNo: true,
 					standardValue: true,
 					unit: true,
 					actualValue: true,

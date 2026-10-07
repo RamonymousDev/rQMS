@@ -213,6 +213,7 @@ File tunggal: `src/lib/server/db/schema.ts`. Workflow dev: `bun run db:push` (bu
 stage:  START | MIDDLE | END
 shift:  DAY | NIGHT
 ok_ng:  OK | NG
+check_type: TORQUE | HAMMER
 ```
 
 ### Tabel Master (15 tabel total)
@@ -229,21 +230,21 @@ ok_ng:  OK | NG
 
 ### Tabel Konfigurasi
 
-| Tabel                 | PK   | Kolom kunci                                                                                                                      | Catatan                           |
-| --------------------- | ---- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| `part_line_configs`   | uuid | `partId`, `lineId` (unique together), `hasSpot`, `spotStandard`, `hasPoint`, `hasHardware`, `hasLength`, `hasVisual`, `isActive` | Header config per part+line       |
-| `part_line_points`    | uuid | `partLineConfigId`, `pointNo` (unique per config), `sequence`                                                                    | Detail: titik inspeksi            |
-| `part_line_hardwares` | uuid | `partLineConfigId`, `hardwareId` (unique per config), `standardValue`, `unit`, `sequence`                                        | Standard di sini, bukan di master |
-| `part_line_lengths`   | uuid | `partLineConfigId`, `lengthNo` (unique per config), `standardMm`, `sequence`                                                     |                                   |
+| Tabel                 | PK   | Kolom kunci                                                                                                                      | Catatan                                                                |
+| --------------------- | ---- | -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `part_line_configs`   | uuid | `partId`, `lineId` (unique together), `hasSpot`, `spotStandard`, `hasPoint`, `hasHardware`, `hasLength`, `hasVisual`, `isActive` | Header config per part+line                                            |
+| `part_line_points`    | uuid | `partLineConfigId`, `pointNo` (unique per config), `sequence`                                                                    | Detail: titik inspeksi                                                 |
+| `part_line_hardwares` | uuid | `partLineConfigId`, `hardwareId` (unique per config), `checkType` (TORQUE/HAMMER), `qty`, `standardValue`, `unit`, `sequence`    | Standard dipakai bersama semua titik (`qty`); di sini, bukan di master |
+| `part_line_lengths`   | uuid | `partLineConfigId`, `lengthNo` (unique per config), `standardMm`, `sequence`                                                     |                                                                        |
 
 ### Tabel Transaksi
 
-| Tabel                  | PK   | Kolom kunci                                                                                                                                                         | Catatan                                      |
-| ---------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| `inspections`          | uuid | `partLineConfigId`, snapshot: `partNo`, `lineCode`, `operatorName`, `stage`, `shift`, `overallStatus`, `spotActual`, `visualStatus`, `visualRemarks`, `inspectedAt` | Append-only, snapshot untuk akurasi historis |
-| `inspection_points`    | uuid | `inspectionId`, `pointNo` (snapshot), `status`, `remarks`                                                                                                           | Cascade delete                               |
-| `inspection_hardwares` | uuid | `inspectionId`, snapshot lengkap hw + `actualValue`, `status`, `remarks`                                                                                            | Cascade delete                               |
-| `inspection_lengths`   | uuid | `inspectionId`, snapshot + `actualMm`, `status`, `remarks`                                                                                                          | Cascade delete                               |
+| Tabel                  | PK   | Kolom kunci                                                                                                                                                         | Catatan                                                   |
+| ---------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `inspections`          | uuid | `partLineConfigId`, snapshot: `partNo`, `lineCode`, `operatorName`, `stage`, `shift`, `overallStatus`, `spotActual`, `visualStatus`, `visualRemarks`, `inspectedAt` | Append-only, snapshot untuk akurasi historis              |
+| `inspection_points`    | uuid | `inspectionId`, `pointNo` (snapshot), `status`, `remarks`                                                                                                           | Cascade delete                                            |
+| `inspection_hardwares` | uuid | `inspectionId`, snapshot lengkap hw + `checkType`, `checkNo`, `actualValue`, `status`, `remarks`                                                                    | Satu baris per titik (hardware × checkNo); cascade delete |
+| `inspection_lengths`   | uuid | `inspectionId`, snapshot + `actualMm`, `status`, `remarks`                                                                                                          | Cascade delete                                            |
 
 ### Tabel Sistem
 
@@ -432,8 +433,8 @@ Aturan bisnis di `evaluate()`:
 
 - **Points**: status OK/NG manual dari operator
 - **Spot**: `actual === standard` → OK (dihitung backend, wajib exact)
-- **Hardwares**: `actual >= standard` → OK (dihitung backend)
-- **Lengths**: `actual === standard` → OK (dihitung backend, wajib exact)
+- **Hardwares**: `actual >= standard` → OK (dihitung backend) — satu hardware bisa punya `qty` titik (`checkNo` 1..qty), semua titik memakai standard yang sama, remarks wajib per titik NG
+- **Lengths**: `actual >= standard` → OK (dihitung backend)
 - **Visual**: OK/NG manual dari operator
 - Satu item NG → `overallStatus = 'NG'`
 - Remarks wajib diisi jika status NG

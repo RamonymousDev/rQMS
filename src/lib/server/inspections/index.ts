@@ -91,9 +91,12 @@ function toFormSpec(config: ActiveConfig) {
 		points: config.points.map((p) => ({ pointNo: p.pointNo })),
 		hasHardware: config.hasHardware,
 		hardwares: config.hardwares.map((h) => ({
-			hardwareId: h.hardwareId,
+			/** id baris config — dipakai sebagai kunci jawaban per titik. */
+			id: h.id,
 			hwNo: h.hardware.hwNo,
 			hwName: h.hardware.hwName,
+			checkType: h.checkType,
+			qty: h.qty,
 			standardValue: h.standardValue,
 			unit: h.unit
 		})),
@@ -174,28 +177,39 @@ function evaluate(config: ActiveConfig, data: SubmitInput) {
 		items.push({ status: statusFor(spotActual, config.spotStandard ?? 0, 'exact'), remarks: null });
 	}
 
-	// --- Hardwares: status dihitung, remarks wajib saat NG.
+	// --- Hardwares: satu baris config = qty titik pengecekan (checkNo 1..qty).
+	// Status dihitung per titik, remarks wajib saat NG.
 	const hardwares = config.hasHardware
-		? config.hardwares.map((configured) => {
-				const input = data.hardwares.find((h) => h.hardwareId === configured.hardwareId);
-				if (!input) throw error(422, `Hardware "${configured.hardware.hwNo}" wajib diisi.`);
-				const status = statusFor(input.actualValue, configured.standardValue, 'min');
-				const remarks = requireRemarks(
-					status,
-					input.remarks,
-					`Hardware "${configured.hardware.hwNo}"`
-				);
-				items.push({ status, remarks });
-				return {
-					hwNo: configured.hardware.hwNo,
-					hwName: configured.hardware.hwName,
-					standardValue: configured.standardValue,
-					unit: configured.unit,
-					actualValue: input.actualValue,
-					status,
-					remarks
-				};
-			})
+		? config.hardwares.flatMap((configured) =>
+				Array.from({ length: configured.qty }, (_, index) => {
+					const checkNo = index + 1;
+					const input = data.hardwares.find((h) => h.id === configured.id && h.checkNo === checkNo);
+					if (!input) {
+						throw error(
+							422,
+							`Hardware "${configured.hardware.hwNo}" titik ${checkNo} wajib diisi.`
+						);
+					}
+					const status = statusFor(input.actualValue, configured.standardValue, 'min');
+					const remarks = requireRemarks(
+						status,
+						input.remarks,
+						`Hardware "${configured.hardware.hwNo}" titik ${checkNo}`
+					);
+					items.push({ status, remarks });
+					return {
+						hwNo: configured.hardware.hwNo,
+						hwName: configured.hardware.hwName,
+						checkType: configured.checkType,
+						checkNo,
+						standardValue: configured.standardValue,
+						unit: configured.unit,
+						actualValue: input.actualValue,
+						status,
+						remarks
+					};
+				})
+			)
 		: [];
 
 	// --- Lengths: idem hardware.
@@ -203,7 +217,7 @@ function evaluate(config: ActiveConfig, data: SubmitInput) {
 		? config.lengths.map((configured) => {
 				const input = data.lengths.find((l) => l.lengthNo === configured.lengthNo);
 				if (!input) throw error(422, `Length "${configured.lengthNo}" wajib diisi.`);
-				const status = statusFor(input.actualMm, configured.standardMm, 'exact');
+				const status = statusFor(input.actualMm, configured.standardMm, 'min');
 				const remarks = requireRemarks(status, input.remarks, `Length "${configured.lengthNo}"`);
 				items.push({ status, remarks });
 				return {

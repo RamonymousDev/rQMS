@@ -46,9 +46,12 @@
 		points: { pointNo: string }[];
 		hasHardware: boolean;
 		hardwares: {
-			hardwareId: string;
+			/** id baris part_line_hardwares — kunci jawaban per titik. */
+			id: string;
 			hwNo: string;
 			hwName: string;
+			checkType: 'TORQUE' | 'HAMMER';
+			qty: number;
 			standardValue: number;
 			unit: string;
 		}[];
@@ -116,9 +119,11 @@
 			if (spotActual !== '') filled++;
 		}
 		if (spec.hasHardware) {
-			for (const h of spec.hardwares) {
-				total++;
-				if (hardwareAnswers[h.hardwareId]?.actualValue !== '') filled++;
+			for (const hw of spec.hardwares) {
+				for (let checkNo = 1; checkNo <= hw.qty; checkNo++) {
+					total++;
+					if (hardwareAnswers[hwKey(hw.id, checkNo)]?.actualValue !== '') filled++;
+				}
 			}
 		}
 		if (spec.hasLength) {
@@ -284,6 +289,24 @@
 		return mode === 'exact' ? (value === standard ? 'OK' : 'NG') : value >= standard ? 'OK' : 'NG';
 	}
 
+	/** Label tipe pengecekan untuk ditampilkan ke operator. */
+	function checkTypeLabel(type: 'TORQUE' | 'HAMMER') {
+		return type === 'TORQUE' ? 'Torque' : 'Hammer';
+	}
+
+	/** Kunci jawaban per titik pengecekan: id baris config + nomor titik. */
+	function hwKey(id: string, checkNo: number) {
+		return `${id}:${checkNo}`;
+	}
+
+	/** Hardware + daftar nomor titiknya (1..qty) untuk render. */
+	const hardwareGroups = $derived.by(() =>
+		(spec?.hardwares ?? []).map((hw) => ({
+			...hw,
+			checks: Array.from({ length: hw.qty }, (_, i) => i + 1)
+		}))
+	);
+
 	async function prepare(nextStage: 'START' | 'MIDDLE' | 'END') {
 		if (!selectedLine || !partNo.trim()) {
 			toast.error('Pilih line dan isi Part No terlebih dahulu.');
@@ -315,7 +338,12 @@
 				data.points.map((p) => [p.pointNo, { status: null, remarks: '' }])
 			);
 			hardwareAnswers = Object.fromEntries(
-				data.hardwares.map((h) => [h.hardwareId, { actualValue: '', remarks: '' }])
+				data.hardwares.flatMap((h) =>
+					Array.from({ length: h.qty }, (_, i) => [
+						hwKey(h.id, i + 1),
+						{ actualValue: '', remarks: '' }
+					])
+				)
 			);
 			lengthAnswers = Object.fromEntries(
 				data.lengths.map((l) => [l.lengthNo, { actualMm: '', remarks: '' }])
@@ -347,11 +375,17 @@
 					}))
 				: [],
 			hardwares: spec.hasHardware
-				? spec.hardwares.map((h) => ({
-						hardwareId: h.hardwareId,
-						actualValue: Number(hardwareAnswers[h.hardwareId]?.actualValue),
-						remarks: hardwareAnswers[h.hardwareId]?.remarks || null
-					}))
+				? spec.hardwares.flatMap((hw) =>
+						Array.from({ length: hw.qty }, (_, i) => {
+							const answer = hardwareAnswers[hwKey(hw.id, i + 1)];
+							return {
+								id: hw.id,
+								checkNo: i + 1,
+								actualValue: Number(answer?.actualValue),
+								remarks: answer?.remarks || null
+							};
+						})
+					)
 				: [],
 			lengths: spec.hasLength
 				? spec.lengths.map((l) => ({
@@ -384,10 +418,12 @@
 
 		if (spec.hasHardware) {
 			for (const hw of spec.hardwares) {
-				const answer = hardwareAnswers[hw.hardwareId];
-				if (!answer?.actualValue) return `Hardware "${hw.hwNo}" belum diisi.`;
-				if (statusFor(answer.actualValue, hw.standardValue) === 'NG' && !answer.remarks.trim()) {
-					return `Remarks wajib diisi untuk Hardware "${hw.hwNo}" yang NG.`;
+				for (let checkNo = 1; checkNo <= hw.qty; checkNo++) {
+					const answer = hardwareAnswers[hwKey(hw.id, checkNo)];
+					if (!answer?.actualValue) return `Hardware "${hw.hwNo}" titik ${checkNo} belum diisi.`;
+					if (statusFor(answer.actualValue, hw.standardValue) === 'NG' && !answer.remarks.trim()) {
+						return `Remarks wajib diisi untuk Hardware "${hw.hwNo}" titik ${checkNo} yang NG.`;
+					}
 				}
 			}
 		}
@@ -396,7 +432,7 @@
 				const answer = lengthAnswers[length.lengthNo];
 				if (!answer?.actualMm) return `Length "${length.lengthNo}" belum diisi.`;
 				if (
-					statusFor(answer.actualMm, length.standardMm, 'exact') === 'NG' &&
+					statusFor(answer.actualMm, length.standardMm, 'min') === 'NG' &&
 					!answer.remarks.trim()
 				) {
 					return `Remarks wajib diisi untuk Length "${length.lengthNo}" yang NG.`;
@@ -449,17 +485,15 @@
 				(payload.points?.filter((p) => p.status === 'OK').length ?? 0) +
 				(payload.hardwares?.filter(
 					(h) =>
-						statusFor(
-							h.actualValue,
-							spec!.hardwares.find((x) => x.hardwareId === h.hardwareId)!.standardValue
-						) === 'OK'
+						statusFor(h.actualValue, spec!.hardwares.find((x) => x.id === h.id)!.standardValue) ===
+						'OK'
 				).length ?? 0) +
 				(payload.lengths?.filter(
 					(l) =>
 						statusFor(
 							l.actualMm,
 							spec!.lengths.find((x) => x.lengthNo === l.lengthNo)!.standardMm,
-							'exact'
+							'min'
 						) === 'OK'
 				).length ?? 0) +
 				(spotOk ? 1 : 0) +
@@ -468,17 +502,15 @@
 				(payload.points?.filter((p) => p.status === 'NG').length ?? 0) +
 				(payload.hardwares?.filter(
 					(h) =>
-						statusFor(
-							h.actualValue,
-							spec!.hardwares.find((x) => x.hardwareId === h.hardwareId)!.standardValue
-						) === 'NG'
+						statusFor(h.actualValue, spec!.hardwares.find((x) => x.id === h.id)!.standardValue) ===
+						'NG'
 				).length ?? 0) +
 				(payload.lengths?.filter(
 					(l) =>
 						statusFor(
 							l.actualMm,
 							spec!.lengths.find((x) => x.lengthNo === l.lengthNo)!.standardMm,
-							'exact'
+							'min'
 						) === 'NG'
 				).length ?? 0) +
 				(spotNg ? 1 : 0) +
@@ -859,50 +891,51 @@
 				{#if spec.hasHardware}
 					<div class="grid gap-3">
 						<h3 class="text-sm font-semibold">Hardwares</h3>
-						{#each spec.hardwares as hw (hw.hardwareId)}
-							{@const status = statusFor(
-								hardwareAnswers[hw.hardwareId]?.actualValue ?? '',
-								hw.standardValue
-							)}
-							<div class="grid gap-2 rounded-lg border p-3">
-								<div class="flex flex-wrap items-center gap-2">
-									<span class="font-mono text-sm font-medium">{hw.hwNo}</span>
-									<span class="text-sm text-muted-foreground">{hw.hwName}</span>
-									<StatusBadge {status} class="ml-auto shrink-0" />
-								</div>
-								<span class="text-sm text-muted-foreground">
-									Standard: <span class="tabular-nums">{hw.standardValue}</span>
-									{hw.unit}
-								</span>
-								<Input
-									type="number"
-									inputmode="decimal"
-									min="0"
-									placeholder={`Actual (${hw.unit})`}
-									class="h-12 tabular-nums"
-									aria-label={`Nilai aktual hardware ${hw.hwNo}`}
-									bind:value={hardwareAnswers[hw.hardwareId].actualValue}
-									oninput={markDirty}
-								/>
-								{#if status === 'NG'}
-									<div class="grid gap-1.5">
-										<Label
-											for="hw-remark-{hw.hardwareId}"
-											class="flex items-center gap-1.5 text-status-ng"
-										>
-											<TriangleAlertIcon class="size-4" aria-hidden="true" />
-											Remarks wajib diisi
-										</Label>
-										<Textarea
-											id="hw-remark-{hw.hardwareId}"
-											placeholder="Jelaskan temuan NG..."
-											bind:value={hardwareAnswers[hw.hardwareId].remarks}
-											aria-invalid={hardwareAnswers[hw.hardwareId].remarks.trim() === ''}
-											class="border-status-ng/50 bg-status-ng-fill focus-visible:ring-status-ng/40"
-										/>
+						{#each hardwareGroups as hw (hw.id)}
+							{#each hw.checks as checkNo (checkNo)}
+								{@const answer = hardwareAnswers[hwKey(hw.id, checkNo)]}
+								{@const status = statusFor(answer?.actualValue ?? '', hw.standardValue)}
+								<div class="grid gap-2 rounded-lg border p-3">
+									<div class="flex flex-wrap items-center gap-2">
+										<span class="font-mono text-sm font-medium">
+											{hw.hwNo} ({hw.hwName}) {checkTypeLabel(hw.checkType)} #{checkNo}
+										</span>
+										<StatusBadge {status} class="ml-auto shrink-0" />
 									</div>
-								{/if}
-							</div>
+									<span class="text-sm text-muted-foreground">
+										Standard: <span class="tabular-nums">{hw.standardValue}</span>
+										{hw.unit}
+									</span>
+									<Input
+										type="number"
+										inputmode="decimal"
+										min="0"
+										placeholder={`Actual (${hw.unit})`}
+										class="h-12 tabular-nums"
+										aria-label={`Nilai aktual hardware ${hw.hwNo} titik ${checkNo}`}
+										bind:value={hardwareAnswers[hwKey(hw.id, checkNo)].actualValue}
+										oninput={markDirty}
+									/>
+									{#if status === 'NG'}
+										<div class="grid gap-1.5">
+											<Label
+												for="hw-remark-{hw.id}-{checkNo}"
+												class="flex items-center gap-1.5 text-status-ng"
+											>
+												<TriangleAlertIcon class="size-4" aria-hidden="true" />
+												Remarks wajib diisi
+											</Label>
+											<Textarea
+												id="hw-remark-{hw.id}-{checkNo}"
+												placeholder="Jelaskan temuan NG..."
+												bind:value={hardwareAnswers[hwKey(hw.id, checkNo)].remarks}
+												aria-invalid={hardwareAnswers[hwKey(hw.id, checkNo)].remarks.trim() === ''}
+												class="border-status-ng/50 bg-status-ng-fill focus-visible:ring-status-ng/40"
+											/>
+										</div>
+									{/if}
+								</div>
+							{/each}
 						{/each}
 					</div>
 					<Separator />
@@ -915,7 +948,7 @@
 							{@const status = statusFor(
 								lengthAnswers[length.lengthNo]?.actualMm ?? '',
 								length.standardMm,
-								'exact'
+								'min'
 							)}
 							<div class="grid gap-2 rounded-lg border p-3">
 								<div class="flex flex-wrap items-center gap-2">
