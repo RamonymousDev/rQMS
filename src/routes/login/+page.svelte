@@ -14,16 +14,16 @@
 
 <div class="absolute top-4 right-4 z-30">
 	<Button
-		variant="ghost"
-		size="sm"
-		class="h-9 w-9 cursor-pointer rounded-full bg-card/80 p-0 shadow-sm ring-1 ring-foreground/10 backdrop-blur transition-colors duration-200 hover:bg-card"
-		aria-label={isDark ? 'Mode terang' : 'Mode gelap'}
+		variant="outline"
+		size="icon"
+		class="size-9 cursor-pointer rounded-md bg-card"
+		aria-label={isDark ? 'Aktifkan mode terang' : 'Aktifkan mode gelap'}
 		onclick={toggleMode}
 	>
 		{#if isDark}
-			<SunIcon class="h-4 w-4" />
+			<SunIcon class="size-4" aria-hidden="true" />
 		{:else}
-			<MoonIcon class="h-4 w-4" />
+			<MoonIcon class="size-4" aria-hidden="true" />
 		{/if}
 	</Button>
 </div>

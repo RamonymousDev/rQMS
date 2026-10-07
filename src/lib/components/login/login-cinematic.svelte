@@ -1,79 +1,182 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import LoginForm from '$lib/components/login-form.svelte';
-	import ClockIcon from '@lucide/svelte/icons/clock';
-	import FactoryIcon from '@lucide/svelte/icons/factory';
-	import LayersIcon from '@lucide/svelte/icons/layers';
-	import MonitorIcon from '@lucide/svelte/icons/monitor';
+	import GearCanvas from '$lib/components/login/gear-canvas.svelte';
 
 	let { form } = $props();
+
+	const stages = ['START', 'MIDDLE', 'END'];
+
+	// Jam dinding pabrik, selalu WIB walau perangkat disetel zona lain.
+	// ASUMSI: shift DAY 07:00-18:59, sisanya NIGHT. Sesuaikan dengan aturan
+	// shift yang dipakai server supaya tampilan di sini tidak menyesatkan.
+	const DAY_START = 7;
+	const DAY_END = 19;
+
+	let now = $state(new Date());
+
+	const parts = $derived.by(() => {
+		const fmt = new Intl.DateTimeFormat('id-ID', {
+			timeZone: 'Asia/Jakarta',
+			hour: '2-digit',
+			minute: '2-digit',
+			hour12: false
+		});
+		const [hh, mm] = fmt.format(now).replace('.', ':').split(':');
+		const hour = Number(hh);
+		return {
+			time: `${hh}:${mm}`,
+			shift: hour >= DAY_START && hour < DAY_END ? 'DAY' : 'NIGHT'
+		};
+	});
+
+	const dateLabel = $derived(
+		new Intl.DateTimeFormat('id-ID', {
+			timeZone: 'Asia/Jakarta',
+			weekday: 'long',
+			day: 'numeric',
+			month: 'long'
+		}).format(now)
+	);
+
+	onMount(() => {
+		const id = setInterval(() => (now = new Date()), 15_000);
+		return () => clearInterval(id);
+	});
 </script>
 
-<div class="relative min-h-svh overflow-hidden bg-background">
+<!--
+	Foto produk = latar di semua ukuran layar. Roda gigi 3D hanya di layar lebar
+	(lihat gear-canvas.svelte). Teks selalu diberi warna eksplisit di atas scrim
+	berlapis, jadi kontras tidak bergantung pada bagian foto yang kebetulan gelap.
+-->
+<div class="relative min-h-svh overflow-hidden bg-neutral-950">
 	<img
 		src="/product.png"
 		alt=""
 		aria-hidden="true"
-		class="pointer-events-none fixed inset-0 h-full w-full object-cover"
+		class="pointer-events-none absolute inset-0 size-full object-cover object-center"
 	/>
+
 	<div
 		aria-hidden="true"
-		class="pointer-events-none fixed inset-0 bg-gradient-to-r from-black/80 via-black/50 to-black/15"
+		class="pointer-events-none absolute inset-0"
+		style="background:linear-gradient(to bottom, oklch(0.12 0.01 265 / 82%) 0%, transparent 22%, transparent 62%, oklch(0.12 0.01 265 / 90%) 100%)"
+	></div>
+	<div
+		aria-hidden="true"
+		class="pointer-events-none absolute inset-0 lg:bg-[linear-gradient(100deg,oklch(0.12_0.01_265/92%)_0%,oklch(0.12_0.01_265/72%)_46%,oklch(0.12_0.01_265/42%)_100%)]"
+	></div>
+	<div
+		aria-hidden="true"
+		class="pointer-events-none absolute inset-0"
+		style="background:radial-gradient(120% 90% at 50% 45%, transparent 40%, oklch(0.12 0.01 265 / 70%) 100%)"
 	></div>
 
-	<div
-		class="relative z-10 mx-auto grid min-h-svh w-full max-w-6xl items-center gap-10 px-6 py-16 pb-28 sm:pb-16 lg:grid-cols-2 lg:px-10"
-	>
-		<div>
-			<span
-				class="inline-flex w-fit items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white ring-1 ring-white/20 backdrop-blur"
-			>
-				<FactoryIcon class="h-3.5 w-3.5" aria-hidden="true" />
-				PT Adyawinsa Stamping Industries
-			</span>
-			<h2
-				class="mt-4 max-w-xl text-4xl leading-tight font-bold tracking-tight text-white sm:text-5xl"
-			>
-				Inspeksi kualitas, langsung di line.
-			</h2>
-			<p class="mt-3 max-w-xl text-sm leading-relaxed text-white/70 sm:text-base">
-				Q-JUN mencatat setiap pemeriksaan START, MIDDLE, dan END — lengkap dengan operator, shift,
-				dan status OK/NG.
-			</p>
-		</div>
+	<GearCanvas />
 
-		<div
-			class="w-full max-w-md rounded-2xl bg-card p-6 text-card-foreground shadow-2xl ring-1 ring-foreground/10 sm:p-8 lg:justify-self-end"
-		>
-			<div class="mb-5 flex items-center gap-3">
+	<!-- pointer-events-none: canvas di belakang tetap bisa diseret.
+	     Kolom kiri & kanan mengaktifkannya lagi untuk teks dan form. -->
+	<div
+		class="pointer-events-none relative z-10 mx-auto flex min-h-svh w-full max-w-6xl flex-col justify-center gap-10 px-5 py-20 sm:px-8 lg:flex-row lg:items-center lg:gap-16 lg:px-10 lg:py-16"
+	>
+		<!-- Kiri: identitas + papan status line -->
+		<div class="pointer-events-auto max-w-lg lg:flex-1">
+			<div class="flex items-center gap-3">
 				<span
-					class="flex size-11 items-center justify-center overflow-hidden rounded-xl bg-muted p-1 ring-1 ring-foreground/10"
+					class="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white p-1.5"
 				>
 					<img src="/adw.png" alt="Logo ADW" class="h-full w-full object-contain" />
 				</span>
-				<div>
-					<p class="text-lg font-bold tracking-tight">Sign in Q-JUN</p>
-					<p class="text-xs text-muted-foreground">Masuk untuk mulai inspeksi</p>
-				</div>
+				<p class="text-label leading-tight text-white/75">PT Adyawinsa Stamping Industries</p>
 			</div>
-			<LoginForm {form} class="w-full" />
+
+			<h1
+				class="mt-8 text-4xl font-semibold tracking-tight text-balance text-white sm:text-5xl lg:leading-[1.05]"
+			>
+				Inspeksi kualitas, langsung di line.
+			</h1>
+
+			<p class="mt-4 max-w-md text-body text-white/70">
+				Catat pemeriksaan setiap stage lengkap dengan operator, shift, dan hasil OK atau NG.
+			</p>
+
+			<!-- Papan line: jam WIB + tiga stage. Satu-satunya elemen yang bergerak. -->
+			<div class="mt-9 rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-md sm:p-5">
+				<div class="flex items-end justify-between gap-4">
+					<div>
+						<p class="text-3xl font-semibold tracking-tight text-white tabular-nums">
+							{parts.time}
+							<span class="ml-1 text-label font-normal text-white/50">WIB</span>
+						</p>
+						<p class="mt-0.5 text-label text-white/55">{dateLabel}</p>
+					</div>
+					<p
+						class="rounded-md border border-white/15 px-2.5 py-1 text-label font-medium text-white/90"
+					>
+						Shift {parts.shift}
+					</p>
+				</div>
+
+				<ol class="relative mt-6 grid grid-cols-3" aria-label="Urutan stage inspeksi">
+					<!-- garis penghubung di belakang titik -->
+					<span
+						aria-hidden="true"
+						class="absolute top-[7px] right-[16.67%] left-[16.67%] h-px bg-white/20"
+					></span>
+					{#each stages as stage, i (stage)}
+						<li class="relative flex flex-col items-center gap-2">
+							<span
+								class="stage-dot size-3.5 rounded-full border-2 border-indigo-300 bg-neutral-900"
+								style="--i:{i}"
+							></span>
+							<span class="text-label font-medium text-white/80">{stage}</span>
+						</li>
+					{/each}
+				</ol>
+			</div>
+		</div>
+
+		<!-- Kanan: form -->
+		<div class="pointer-events-auto w-full lg:w-[25rem] lg:shrink-0">
+			<div
+				class="dark rounded-xl border border-white/10 bg-neutral-900/85 p-6 shadow-2xl shadow-black/40 backdrop-blur-xl sm:p-8"
+			>
+				<h2 class="text-xl font-semibold tracking-tight text-white">Masuk ke Q-JUN</h2>
+				<p class="mt-1 mb-6 text-label text-white/60">
+					Gunakan akun operator atau supervisor Anda.
+				</p>
+
+				<LoginForm {form} class="w-full" />
+			</div>
+
+			<p class="mt-4 hidden text-label text-white/45 lg:block">Seret roda gigi untuk memutar.</p>
 		</div>
 	</div>
-
-	<ul
-		class="absolute inset-x-0 bottom-0 z-10 hidden border-t border-white/10 bg-black/40 backdrop-blur sm:block"
-	>
-		<div
-			class="mx-auto flex w-full max-w-6xl items-center gap-8 px-6 py-3 text-xs text-white/75 lg:px-10"
-		>
-			<li class="flex items-center gap-2">
-				<LayersIcon class="h-4 w-4" aria-hidden="true" /> 3 stage: START · MIDDLE · END
-			</li>
-			<li class="flex items-center gap-2">
-				<ClockIcon class="h-4 w-4" aria-hidden="true" /> Shift DAY/NIGHT otomatis (WIB)
-			</li>
-			<li class="flex items-center gap-2">
-				<MonitorIcon class="h-4 w-4" aria-hidden="true" /> Board realtime per-line
-			</li>
-		</div>
-	</ul>
 </div>
+
+<style>
+	/* Satu momen saja: tiga titik stage menyala berurutan saat halaman dibuka. */
+	.stage-dot {
+		animation: stage-on 0.5s ease-out both;
+		animation-delay: calc(0.35s + var(--i) * 0.28s);
+	}
+
+	@keyframes stage-on {
+		from {
+			background-color: oklch(0.2 0.01 265);
+			box-shadow: 0 0 0 0 transparent;
+		}
+		to {
+			background-color: oklch(0.8 0.1 272);
+			box-shadow: 0 0 14px 2px oklch(0.72 0.13 272 / 55%);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.stage-dot {
+			animation: none;
+			background-color: oklch(0.8 0.1 272);
+		}
+	}
+</style>
