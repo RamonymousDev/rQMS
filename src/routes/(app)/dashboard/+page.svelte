@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
@@ -367,12 +368,12 @@
 		</Card.Root>
 	</div>
 
-	<!-- Baris bawah: status per line + inspeksi terakhir -->
+	<!-- Baris bawah: list board + inspeksi terakhir -->
 	<div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
 		<Card.Root size="sm" class="card-edge">
 			<Card.Header>
 				<div class="flex items-center justify-between gap-3">
-					<Card.Title class="text-section">Status per line</Card.Title>
+					<Card.Title class="text-section">List board</Card.Title>
 					<span class="text-label text-muted-foreground">{lines.length} line</span>
 				</div>
 			</Card.Header>
@@ -396,8 +397,10 @@
 				{:else}
 					<div class="grid gap-2 sm:grid-cols-2">
 						{#each lineRows as row (row.line.id)}
-							<div
-								class="flex items-center gap-3 rounded-lg bg-card p-3 card-edge transition-colors duration-150 hover:bg-accent/40"
+							<a
+								href={resolve(`/board/${row.line.code}`)}
+								aria-label={`Lihat board ${row.line.code}`}
+								class="flex items-center gap-3 rounded-lg bg-card p-3 card-edge transition-colors duration-150 hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
 							>
 								<div class="min-w-0 flex-1">
 									<p class="truncate font-mono text-section font-semibold">
@@ -412,10 +415,11 @@
 										/>
 									</div>
 								</div>
-								<Button variant="outline" size="sm" href="/inspect" aria-label="Mulai inspeksi">
-									<PlayIcon class="size-3.5" aria-hidden="true" />
-								</Button>
-							</div>
+								<ArrowRightIcon
+									class="size-3.5 shrink-0 text-muted-foreground"
+									aria-hidden="true"
+								/>
+							</a>
 						{/each}
 					</div>
 				{/if}
