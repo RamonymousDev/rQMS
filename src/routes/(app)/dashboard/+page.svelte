@@ -11,6 +11,7 @@
 	import { cn } from '$lib/utils.js';
 	import { getShift } from '$lib/shift.js';
 	import type { DashboardStats } from '$lib/server/dashboard.js';
+	import type { PageProps } from './$types.js';
 
 	type InspectionRow = {
 		id: string;
@@ -18,7 +19,7 @@
 		lineCode: string;
 		stage: string;
 		shift: string;
-		overallStatus: 'OK' | 'NG';
+		overallStatus: 'OK' | 'NG' | 'REPAIR';
 		operatorName: string;
 		inspectedAt: string;
 	};
@@ -30,11 +31,11 @@
 	import InboxIcon from '@lucide/svelte/icons/inbox';
 	import PlayIcon from '@lucide/svelte/icons/play';
 
-	const { data } = $props();
+	const { data }: PageProps = $props();
 
 	const emptyStats: DashboardStats = {
-		totals: { ok: 0, ng: 0, total: 0 },
-		today: { ok: 0, ng: 0, total: 0 },
+		totals: { ok: 0, ng: 0, repair: 0, total: 0 },
+		today: { ok: 0, ng: 0, repair: 0, total: 0 },
 		trend: [],
 		lines: []
 	};
@@ -68,6 +69,7 @@
 
 	const trendTotals = $derived(stats.trend.map((p) => p.total));
 	const trendOk = $derived(stats.trend.map((p) => p.ok));
+	const trendRepair = $derived(stats.trend.map((p) => p.repair));
 	const trendNg = $derived(stats.trend.map((p) => p.ng));
 
 	async function refreshDashboard() {
@@ -115,11 +117,16 @@
 
 	const statusChartConfig = {
 		ok: { label: 'OK', theme: { light: 'var(--status-ok)', dark: 'var(--status-ok)' } },
+		repair: {
+			label: 'Repair',
+			theme: { light: 'var(--status-warn)', dark: 'var(--status-warn)' }
+		},
 		ng: { label: 'NG', theme: { light: 'var(--status-ng)', dark: 'var(--status-ng)' } }
 	} satisfies Chart.ChartConfig;
 
 	const donutData = $derived([
 		{ key: 'ok', label: 'OK', value: stats.totals.ok },
+		{ key: 'repair', label: 'Repair', value: stats.totals.repair },
 		{ key: 'ng', label: 'NG', value: stats.totals.ng }
 	]);
 
@@ -174,7 +181,7 @@
 		Saat kosong: "-" muted, bukan angka 0 besar yang menyesatkan.
 	-->
 	<Card.Root size="sm" class="card-edge">
-		<Card.Content class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+		<Card.Content class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
 			<div class="flex flex-col justify-between gap-3 px-1 py-2 sm:border-r sm:border-border">
 				<div>
 					<p class="text-label text-muted-foreground">Inspeksi hari ini</p>
@@ -185,6 +192,8 @@
 				<div class="flex items-end justify-between gap-3">
 					<p class="text-label text-muted-foreground">
 						OK <span class="font-medium text-status-ok tabular-nums">{stats.today.ok}</span>
+						· Repair
+						<span class="font-medium text-status-warn tabular-nums">{stats.today.repair}</span>
 						· NG
 						<span class="font-medium text-status-ng tabular-nums">{stats.today.ng}</span>
 					</p>
@@ -192,9 +201,7 @@
 				</div>
 			</div>
 
-			<div
-				class="flex flex-col justify-between gap-3 px-1 py-2 sm:border-r sm:border-border lg:border-r-0 lg:border-b-0"
-			>
+			<div class="flex flex-col justify-between gap-3 px-1 py-2 lg:border-r lg:border-border">
 				<div>
 					<p class="text-label text-muted-foreground">OK rate</p>
 					<p class="mt-1.5 text-kpi tabular-nums">
@@ -208,6 +215,24 @@
 				<div class="flex items-end justify-between gap-3">
 					<p class="text-label text-muted-foreground">OK hari ini</p>
 					<Sparkline values={trendOk} class="text-status-ok" />
+				</div>
+			</div>
+
+			<div class="flex flex-col justify-between gap-3 px-1 py-2 sm:border-r sm:border-border">
+				<div>
+					<p class="text-label text-muted-foreground">Repair hari ini</p>
+					<p
+						class={cn(
+							'mt-1.5 text-kpi tabular-nums',
+							stats.today.repair > 0 ? 'text-status-warn' : ''
+						)}
+					>
+						{stats.today.repair > 0 ? stats.today.repair : '–'}
+					</p>
+				</div>
+				<div class="flex items-end justify-between gap-3">
+					<p class="text-label text-muted-foreground">Sudah ditangani</p>
+					<Sparkline values={trendRepair} class="text-status-warn" />
 				</div>
 			</div>
 
@@ -277,6 +302,7 @@
 							seriesLayout="group"
 							series={[
 								{ key: 'ok', label: 'OK', color: 'var(--color-ok)' },
+								{ key: 'repair', label: 'Repair', color: 'var(--color-status-warn)' },
 								{ key: 'ng', label: 'NG', color: 'var(--color-ng)' }
 							]}
 							yDomain={[0, Math.max(1, ...trendTotals)]}
@@ -293,7 +319,7 @@
 
 		<Card.Root size="sm" class="card-edge">
 			<Card.Header>
-				<Card.Title class="text-section">Distribusi OK / NG</Card.Title>
+				<Card.Title class="text-section">Distribusi OK / NG / Repair</Card.Title>
 			</Card.Header>
 			<Card.Content>
 				{#if loading && stats.totals.total === 0}
@@ -317,8 +343,8 @@
 								key="key"
 								label="label"
 								value="value"
-								cDomain={['ok', 'ng']}
-								cRange={['var(--color-ok)', 'var(--color-ng)']}
+								cDomain={['ok', 'repair', 'ng']}
+								cRange={['var(--color-ok)', 'var(--color-status-warn)', 'var(--color-ng)']}
 								innerRadius={62}
 								outerRadius={92}
 								legend

@@ -31,20 +31,23 @@
 	 * line produksi. NG diberi ring tebal supaya menonjol lebih dulu dari OK.
 	 *
 	 * Catatan a11y: badge hanya menampilkan inisial stage (S/M/E), jadi warna
-	 * bukan satu-satunya pembeda OK/NG. Dua penanda lain: `aria-label` menyebut
-	 * statusnya secara eksplisit, dan NG memakai ring 4px sementara OK tidak —
-	 * bentuk, bukan hanya hue. Jangan samakan `badgeClass` OK dan NG.
+	 * bukan satu-satunya pembeda OK/NG/REPAIR. Dua penanda lain: `aria-label`
+	 * menyebut statusnya secara eksplisit, dan bentuk ringnya berbeda — NG ring
+	 * 4px, REPAIR ring 2px, OK tanpa ring. Jangan samakan `badgeClass` ketiganya.
 	 */
 	function badgeClass(status: StageStatus['status']): string {
 		if (status === 'OK') return 'border-status-ok bg-status-ok text-white shadow-sm';
 		if (status === 'NG')
 			return 'border-status-ng bg-status-ng text-white shadow-md ring-4 ring-status-ng/35';
+		if (status === 'REPAIR')
+			return 'border-status-warn bg-status-warn text-white shadow-sm ring-2 ring-status-warn/35';
 		return 'border-dashed border-muted-foreground/40 bg-muted/50 text-muted-foreground/70';
 	}
 
 	function lineClass(status: StageStatus['status']): string {
 		if (status === 'OK') return 'bg-status-ok';
 		if (status === 'NG') return 'bg-status-ng';
+		if (status === 'REPAIR') return 'bg-status-warn';
 		return 'bg-border';
 	}
 

@@ -169,12 +169,14 @@ function evaluate(config: ActiveConfig, data: SubmitInput) {
 
 	// --- Spot: status dihitung dari actual vs standard.
 	let spotActual: number | null = null;
+	let spotStatus: 'OK' | 'NG' | null = null;
 	if (config.hasSpot) {
 		if (data.spotActual === null || data.spotActual === undefined) {
 			throw error(422, 'Spot actual wajib diisi.');
 		}
 		spotActual = data.spotActual;
-		items.push({ status: statusFor(spotActual, config.spotStandard ?? 0, 'exact'), remarks: null });
+		spotStatus = statusFor(spotActual, config.spotStandard ?? 0, 'exact');
+		items.push({ status: spotStatus, remarks: null });
 	}
 
 	// --- Hardwares: satu baris config = qty titik pengecekan (checkNo 1..qty).
@@ -243,7 +245,16 @@ function evaluate(config: ActiveConfig, data: SubmitInput) {
 	// Rule #2: satu saja NG → overall NG.
 	const overallStatus: 'OK' | 'NG' = items.some((item) => item.status === 'NG') ? 'NG' : 'OK';
 
-	return { points, spotActual, hardwares, lengths, visualStatus, visualRemarks, overallStatus };
+	return {
+		points,
+		spotActual,
+		spotStatus,
+		hardwares,
+		lengths,
+		visualStatus,
+		visualRemarks,
+		overallStatus
+	};
 }
 
 /**
@@ -277,6 +288,7 @@ export async function submitInspection(user: SessionUser, body: unknown) {
 				shift,
 				overallStatus: result.overallStatus,
 				spotActual: result.spotActual,
+				spotStatus: result.spotStatus,
 				visualStatus: result.visualStatus,
 				visualRemarks: result.visualRemarks,
 				operatorId: user.id,

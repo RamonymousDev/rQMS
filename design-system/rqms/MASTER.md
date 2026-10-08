@@ -82,12 +82,12 @@ Dua jebakan yang sudah pernah gagal dan jangan diulang:
 
 ### Status tokens (reserved — tidak pernah dekoratif)
 
-| Status          | Light                  | Dark                    | Selalu disertai            |
-| --------------- | ---------------------- | ----------------------- | -------------------------- |
-| `--status-ok`   | `oklch(0.48 0.13 152)` | `oklch(0.82 0.15 152)`  | ikon centang + label "OK"  |
-| `--status-ng`   | `oklch(0.5 0.19 25)`   | `oklch(0.78 0.16 25)`   | ikon segitiga + label "NG" |
-| `--status-warn` | `oklch(0.5 0.13 75)`   | `oklch(0.86 0.14 80)`   | ikon + label               |
-| `--status-idle` | `oklch(0.5 0.012 265)` | `oklch(0.62 0.015 265)` | "Belum ada data"           |
+| Status          | Light                  | Dark                    | Selalu disertai             |
+| --------------- | ---------------------- | ----------------------- | --------------------------- |
+| `--status-ok`   | `oklch(0.48 0.13 152)` | `oklch(0.82 0.15 152)`  | ikon centang + label "OK"   |
+| `--status-ng`   | `oklch(0.5 0.19 25)`   | `oklch(0.78 0.16 25)`   | ikon segitiga + label "NG"  |
+| `--status-warn` | `oklch(0.5 0.13 75)`   | `oklch(0.86 0.14 80)`   | ikon kunci + label "Repair" |
+| `--status-idle` | `oklch(0.5 0.012 265)` | `oklch(0.62 0.015 265)` | "Belum ada data"            |
 
 Semua status punya pasangan `-fill` (versi transparan) untuk background pill.
 Pill memakai **tint + teks + dot**, bukan blok warna solid — solid menutupi teks

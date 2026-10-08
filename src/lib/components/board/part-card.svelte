@@ -16,7 +16,7 @@
 	const SHIFTS: ShiftKey[] = ['DAY', 'NIGHT'];
 	const SHIFT_LABELS: Record<ShiftKey, string> = { DAY: 'Day', NIGHT: 'Night' };
 
-	function aggregateStatus(part: BoardPart): 'NG' | 'OK' | null {
+	function aggregateStatus(part: BoardPart): 'NG' | 'OK' | 'REPAIR' | null {
 		return latestOverall(part)?.status ?? null;
 	}
 
@@ -28,18 +28,31 @@
 	 * sebelum sempat membaca teks — penting untuk board yang dipindai cepat.
 	 */
 	const railClass = $derived(
-		overall === 'NG' ? 'bg-status-ng' : overall === 'OK' ? 'bg-status-ok' : 'bg-border'
+		overall === 'NG'
+			? 'bg-status-ng'
+			: overall === 'REPAIR'
+				? 'bg-status-warn'
+				: overall === 'OK'
+					? 'bg-status-ok'
+					: 'bg-border'
 	);
 
 	const cardClass = $derived(
 		cn(
 			'flex overflow-hidden rounded-xl border bg-card shadow-sm transition-all',
-			hasNg ? 'border-status-ng/40 ring-1 ring-status-ng/25' : 'border-border hover:shadow-md'
+			hasNg
+				? 'border-status-ng/40 ring-1 ring-status-ng/25'
+				: overall === 'REPAIR'
+					? 'border-status-warn/40 ring-1 ring-status-warn/25'
+					: 'border-border hover:shadow-md'
 		)
 	);
 
 	const headerClass = $derived(
-		cn('flex items-center justify-between gap-3 px-5 py-4', hasNg ? 'bg-status-ng-fill' : '')
+		cn(
+			'flex items-center justify-between gap-3 px-5 py-4',
+			hasNg ? 'bg-status-ng-fill' : overall === 'REPAIR' ? 'bg-status-warn-fill' : ''
+		)
 	);
 
 	const statusBadgeClass = $derived(
@@ -48,9 +61,11 @@
 			tvMode ? 'px-3 py-1 text-sm' : 'px-2.5 py-0.5 text-xs',
 			overall === 'NG'
 				? 'bg-status-ng text-white'
-				: overall === 'OK'
-					? 'bg-status-ok text-white'
-					: 'bg-muted text-muted-foreground'
+				: overall === 'REPAIR'
+					? 'bg-status-warn text-white'
+					: overall === 'OK'
+						? 'bg-status-ok text-white'
+						: 'bg-muted text-muted-foreground'
 		)
 	);
 </script>
@@ -87,13 +102,14 @@
 			{#each SHIFTS as shift (shift)}
 				{@const shiftStatuses = part.status[shift]}
 				{@const shiftHasNg = latestInShift(part, shift)?.status === 'NG'}
+				{@const shiftHasRepair = latestInShift(part, shift)?.status === 'REPAIR'}
 				{@const isActive = shift === currentShift}
 
 				<div
 					class={cn(
 						'flex items-center justify-between gap-3 transition-colors',
 						tvMode ? 'px-4 py-4' : 'px-4 py-2.5',
-						shiftHasNg ? 'bg-status-ng-fill/50' : '',
+						shiftHasNg ? 'bg-status-ng-fill/50' : shiftHasRepair ? 'bg-status-warn-fill/50' : '',
 						isActive && !tvMode ? 'bg-primary/5' : '',
 						isActive && tvMode ? 'bg-amber-500/10' : ''
 					)}
@@ -103,7 +119,11 @@
 							class={cn(
 								'font-semibold tracking-wider uppercase',
 								tvMode ? 'text-xs' : 'text-[10px]',
-								shiftHasNg ? 'text-status-ng' : 'text-muted-foreground'
+								shiftHasNg
+									? 'text-status-ng'
+									: shiftHasRepair
+										? 'text-status-warn'
+										: 'text-muted-foreground'
 							)}
 						>
 							{SHIFT_LABELS[shift]}

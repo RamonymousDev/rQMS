@@ -13,6 +13,7 @@ type InspectionRow = Awaited<ReturnType<typeof queryInspections>>[number];
 
 const STATUS_OK = 'OK';
 const STATUS_NG = 'NG';
+const STATUS_REPAIR = 'REPAIR';
 
 const SHEET_MAIN = 'Inspeksi';
 const SHEET_POINTS = 'Points';
@@ -73,7 +74,12 @@ function queryInspections(filters: SQL[]) {
 			operator: { columns: { nik: true, name: true } },
 			points: { orderBy: (p) => [asc(p.pointNo)] },
 			hardwares: { orderBy: (h) => [asc(h.hwNo)] },
-			lengths: { orderBy: (l) => [asc(l.lengthNo)] }
+			lengths: { orderBy: (l) => [asc(l.lengthNo)] },
+			// Repair aktif (belum dibatalkan) untuk kolom action di tiap sheet.
+			repairs: {
+				where: (r, { isNull }) => isNull(r.revertedAt),
+				columns: { itemType: true, itemId: true, action: true }
+			}
 		}
 	});
 }
@@ -93,6 +99,9 @@ function styleStatusCell(cell: ExcelJS.Cell, status: string | null | undefined):
 	if (status === STATUS_NG) {
 		cell.font = { color: { argb: 'FFB91C1C' }, bold: true };
 		cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
+	} else if (status === STATUS_REPAIR) {
+		cell.font = { color: { argb: 'FFB45309' }, bold: true };
+		cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } };
 	} else if (status === STATUS_OK) {
 		cell.font = { color: { argb: 'FF15803D' }, bold: true };
 		cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } };
@@ -139,7 +148,12 @@ async function buildWorkbook(
 	summary.columns = [{ width: 24 }, { width: 40 }];
 	const total = rows.length;
 	const ok = rows.filter((r) => r.overallStatus === STATUS_OK).length;
-	const ng = total - ok;
+	const ng = rows.filter((r) => r.overallStatus === STATUS_NG).length;
+	const repair = rows.filter((r) => r.overallStatus === STATUS_REPAIR).length;
+
+	/** Action repair aktif untuk item tertentu; '' kalau tidak ada. */
+	const repairAction = (r: InspectionRow, itemType: string, itemId: string | null) =>
+		r.repairs.find((rep) => rep.itemType === itemType && rep.itemId === itemId)?.action ?? '';
 
 	const title = summary.addRow(['Ringkasan Export Inspeksi']);
 	title.getCell(1).font = { bold: true, size: 14 };
@@ -149,6 +163,7 @@ async function buildWorkbook(
 		['Total Inspeksi', total],
 		['Status OK', ok],
 		['Status NG', ng],
+		['Status Repair', repair],
 		['Waktu Export (WIB)', formatWib(new Date(new Date().getTime() + WIB_OFFSET_MS))]
 	];
 	if (filterLabels.length) {
@@ -176,7 +191,9 @@ async function buildWorkbook(
 		{ header: 'Spot Actual', width: 12 },
 		{ header: 'Visual', width: 9 },
 		{ header: 'Visual Remarks', width: 30 },
-		{ header: 'Jumlah Item NG', width: 14 }
+		{ header: 'Jumlah Item NG', width: 14 },
+		{ header: 'Jumlah Repair', width: 12 },
+		{ header: 'Repair Spot/Visual', width: 40 }
 	];
 	const mainRows = rows.map((r, i) => {
 		const itemNg =
@@ -184,6 +201,12 @@ async function buildWorkbook(
 			r.points.filter((p) => p.status === STATUS_NG).length +
 			r.hardwares.filter((h) => h.status === STATUS_NG).length +
 			r.lengths.filter((l) => l.status === STATUS_NG).length;
+		const repairSpotVisual = [
+			repairAction(r, 'SPOT', null) && `Spot: ${repairAction(r, 'SPOT', null)}`,
+			repairAction(r, 'VISUAL', null) && `Visual: ${repairAction(r, 'VISUAL', null)}`
+		]
+			.filter(Boolean)
+			.join(' | ');
 		return [
 			i + 1,
 			formatWib(r.inspectedAt),
@@ -197,7 +220,9 @@ async function buildWorkbook(
 			r.spotActual ?? '',
 			r.visualStatus ?? '',
 			r.visualRemarks ?? '',
-			itemNg
+			itemNg,
+			r.repairs.length,
+			repairSpotVisual
 		];
 	});
 	await writeDataSheet(wb, SHEET_MAIN, mainColumns, mainRows, 9);
@@ -214,7 +239,8 @@ async function buildWorkbook(
 		{ header: 'Overall', width: 10 },
 		{ header: 'Point No', width: 12 },
 		{ header: 'Status', width: 10 },
-		{ header: 'Remarks', width: 40 }
+		{ header: 'Remarks', width: 40 },
+		{ header: 'Repair Action', width: 40 }
 	];
 	const pointRows = rows.flatMap((r) =>
 		r.points.map((p) => [
@@ -228,7 +254,8 @@ async function buildWorkbook(
 			r.overallStatus,
 			p.pointNo,
 			p.status,
-			p.remarks ?? ''
+			p.remarks ?? '',
+			repairAction(r, 'POINT', p.id)
 		])
 	);
 	await writeDataSheet(wb, SHEET_POINTS, pointColumns, pointRows, 10);
@@ -251,7 +278,8 @@ async function buildWorkbook(
 		{ header: 'Unit', width: 8 },
 		{ header: 'Actual', width: 10 },
 		{ header: 'Status', width: 10 },
-		{ header: 'Remarks', width: 40 }
+		{ header: 'Remarks', width: 40 },
+		{ header: 'Repair Action', width: 40 }
 	];
 	const hardwareRows = rows.flatMap((r) =>
 		r.hardwares.map((h) => [
@@ -271,10 +299,11 @@ async function buildWorkbook(
 			h.unit,
 			h.actualValue,
 			h.status,
-			h.remarks ?? ''
+			h.remarks ?? '',
+			repairAction(r, 'HARDWARE', h.id)
 		])
 	);
-	await writeDataSheet(wb, SHEET_HARDWARES, hardwareColumns, hardwareRows, 14);
+	await writeDataSheet(wb, SHEET_HARDWARES, hardwareColumns, hardwareRows, 16);
 
 	// --- Lengths
 	const lengthColumns = [
@@ -290,7 +319,8 @@ async function buildWorkbook(
 		{ header: 'Standard (mm)', width: 14 },
 		{ header: 'Actual (mm)', width: 14 },
 		{ header: 'Status', width: 10 },
-		{ header: 'Remarks', width: 40 }
+		{ header: 'Remarks', width: 40 },
+		{ header: 'Repair Action', width: 40 }
 	];
 	const lengthRows = rows.flatMap((r) =>
 		r.lengths.map((l) => [
@@ -306,7 +336,8 @@ async function buildWorkbook(
 			l.standardMm,
 			l.actualMm,
 			l.status,
-			l.remarks ?? ''
+			l.remarks ?? '',
+			repairAction(r, 'LENGTH', l.id)
 		])
 	);
 	await writeDataSheet(wb, SHEET_LENGTHS, lengthColumns, lengthRows, 12);

@@ -14,24 +14,29 @@
 
 	const ngCount = $derived(parts.filter((p) => latestOverall(p)?.status === 'NG').length);
 
+	const repairCount = $derived(parts.filter((p) => latestOverall(p)?.status === 'REPAIR').length);
+
 	const okCount = $derived(parts.filter((p) => latestOverall(p)?.status === 'OK').length);
 
-	const pendingCount = $derived(parts.length - ngCount - okCount);
+	const pendingCount = $derived(parts.length - ngCount - repairCount - okCount);
 
 	const isHistorical = $derived(date !== today);
 
 	/**
-	 * Papan skor 3 angka besar (NG · OK · Belum) — lebih cepat dipindai daripada
-	 * badge kecil, dan NG selalu di kiri karena itu yang paling butuh perhatian.
+	 * Papan skor 4 angka besar (NG · Repair · OK · Belum) — lebih cepat
+	 * dipindai daripada badge kecil, dan NG selalu di kiri karena itu yang
+	 * paling butuh perhatian.
 	 */
 	const tiles = $derived([
 		{ label: 'NG', value: ngCount, tone: 'ng' as const },
+		{ label: 'Repair', value: repairCount, tone: 'repair' as const },
 		{ label: 'OK', value: okCount, tone: 'ok' as const },
 		{ label: 'Belum', value: pendingCount, tone: 'pending' as const }
 	]);
 
-	function tileValueClass(tone: 'ng' | 'ok' | 'pending'): string {
+	function tileValueClass(tone: 'ng' | 'repair' | 'ok' | 'pending'): string {
 		if (tone === 'ng') return 'text-status-ng';
+		if (tone === 'repair') return 'text-status-warn';
 		if (tone === 'ok') return 'text-status-ok';
 		return 'text-foreground';
 	}

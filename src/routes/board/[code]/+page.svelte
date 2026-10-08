@@ -140,6 +140,27 @@
 	let modalSubtitle = $state('');
 	let expandedId = $state<string | null>(null);
 
+	type RepairRow = InspectionHistoryRow['repairs'][number];
+
+	/**
+	 * Board history API mungkin tidak menyertakan `id` baris child (points /
+	 * lengths), jadi baca secara defensif supaya matching repair tetap type-safe.
+	 */
+	function childId(item: object | null | undefined): string | null {
+		if (!item || !('id' in item)) return null;
+		const id = (item as { id?: unknown }).id;
+		return typeof id === 'string' ? id : null;
+	}
+
+	/** Repair AKTIF untuk satu item; SPOT/VISUAL tidak punya baris child (itemId null). */
+	function findRepair(
+		row: InspectionHistoryRow,
+		itemType: RepairRow['itemType'],
+		itemId: string | null = null
+	): RepairRow | null {
+		return row.repairs.find((r) => r.itemType === itemType && r.itemId === itemId) ?? null;
+	}
+
 	async function handleBadgeClick(part: BoardPart, shift: ShiftKey, stage: StageKey) {
 		const STAGE_LABELS: Record<StageKey, string> = { START: 'Start', MIDDLE: 'Middle', END: 'End' };
 		const SHIFT_LABELS: Record<ShiftKey, string> = { DAY: 'Day', NIGHT: 'Night' };
@@ -390,7 +411,11 @@
 							<div
 								class={cn(
 									'overflow-hidden rounded-md border text-sm transition-colors',
-									row.overallStatus === 'NG' ? 'border-status-ng/30' : 'border-border'
+									row.overallStatus === 'NG'
+										? 'border-status-ng/30'
+										: row.overallStatus === 'REPAIR'
+											? 'border-status-warn/30'
+											: 'border-border'
 								)}
 							>
 								<button
@@ -407,7 +432,9 @@
 											'shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold',
 											row.overallStatus === 'OK'
 												? 'bg-status-ok-fill text-status-ok'
-												: 'bg-status-ng-fill text-status-ng'
+												: row.overallStatus === 'REPAIR'
+													? 'bg-status-warn-fill text-status-warn'
+													: 'bg-status-ng-fill text-status-ng'
 										)}
 									>
 										{row.overallStatus}
@@ -446,14 +473,38 @@
 									<div class="border-t bg-muted/20 px-4 pt-3 pb-4">
 										<div class="grid gap-3 text-sm">
 											{#if row.spotActual !== null && row.spotActual !== undefined}
+												{@const spotRepair = findRepair(row, 'SPOT')}
 												<div class="grid gap-1">
 													<p
 														class="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
 													>
 														Spot
 													</p>
-													<div class="rounded border bg-background px-3 py-1.5 text-xs">
-														Actual: {row.spotActual}
+													<div
+														class="flex items-start justify-between gap-3 rounded border bg-background px-3 py-1.5"
+													>
+														<div class="grid">
+															<span class="text-xs">Actual: {row.spotActual}</span>
+															{#if spotRepair}
+																<span class="text-xs text-status-warn">
+																	Repair: {spotRepair.action} — {spotRepair.actorName}
+																</span>
+															{/if}
+														</div>
+														{#if row.spotStatus}
+															<span
+																class={cn(
+																	'shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold',
+																	row.spotStatus === 'OK'
+																		? 'bg-status-ok-fill text-status-ok'
+																		: row.spotStatus === 'REPAIR'
+																			? 'bg-status-warn-fill text-status-warn'
+																			: 'bg-status-ng-fill text-status-ng'
+																)}
+															>
+																{row.spotStatus}
+															</span>
+														{/if}
 													</div>
 												</div>
 											{/if}
@@ -466,6 +517,7 @@
 														Points
 													</p>
 													{#each row.points as point (point.pointNo)}
+														{@const pointRepair = findRepair(row, 'POINT', childId(point))}
 														<div
 															class="flex items-start justify-between gap-3 rounded border bg-background px-3 py-1.5"
 														>
@@ -474,13 +526,20 @@
 																{#if point.remarks}
 																	<span class="text-xs text-muted-foreground">{point.remarks}</span>
 																{/if}
+																{#if pointRepair}
+																	<span class="text-xs text-status-warn">
+																		Repair: {pointRepair.action} — {pointRepair.actorName}
+																	</span>
+																{/if}
 															</div>
 															<span
 																class={cn(
 																	'shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold',
 																	point.status === 'OK'
 																		? 'bg-status-ok-fill text-status-ok'
-																		: 'bg-status-ng-fill text-status-ng'
+																		: point.status === 'REPAIR'
+																			? 'bg-status-warn-fill text-status-warn'
+																			: 'bg-status-ng-fill text-status-ng'
 																)}
 															>
 																{point.status}
@@ -498,6 +557,7 @@
 														Hardwares
 													</p>
 													{#each row.hardwares as hw (hw.id)}
+														{@const hwRepair = findRepair(row, 'HARDWARE', hw.id)}
 														<div
 															class="flex items-start justify-between gap-3 rounded border bg-background px-3 py-1.5"
 														>
@@ -514,13 +574,20 @@
 																{#if hw.remarks}
 																	<span class="text-xs text-muted-foreground">{hw.remarks}</span>
 																{/if}
+																{#if hwRepair}
+																	<span class="text-xs text-status-warn">
+																		Repair: {hwRepair.action} — {hwRepair.actorName}
+																	</span>
+																{/if}
 															</div>
 															<span
 																class={cn(
 																	'shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold',
 																	hw.status === 'OK'
 																		? 'bg-status-ok-fill text-status-ok'
-																		: 'bg-status-ng-fill text-status-ng'
+																		: hw.status === 'REPAIR'
+																			? 'bg-status-warn-fill text-status-warn'
+																			: 'bg-status-ng-fill text-status-ng'
 																)}
 															>
 																{hw.status}
@@ -538,6 +605,7 @@
 														Lengths
 													</p>
 													{#each row.lengths as length (length.lengthNo)}
+														{@const lengthRepair = findRepair(row, 'LENGTH', childId(length))}
 														<div
 															class="flex items-start justify-between gap-3 rounded border bg-background px-3 py-1.5"
 														>
@@ -550,13 +618,20 @@
 																	<span class="text-xs text-muted-foreground">{length.remarks}</span
 																	>
 																{/if}
+																{#if lengthRepair}
+																	<span class="text-xs text-status-warn">
+																		Repair: {lengthRepair.action} — {lengthRepair.actorName}
+																	</span>
+																{/if}
 															</div>
 															<span
 																class={cn(
 																	'shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold',
 																	length.status === 'OK'
 																		? 'bg-status-ok-fill text-status-ok'
-																		: 'bg-status-ng-fill text-status-ng'
+																		: length.status === 'REPAIR'
+																			? 'bg-status-warn-fill text-status-warn'
+																			: 'bg-status-ng-fill text-status-ng'
 																)}
 															>
 																{length.status}
@@ -567,6 +642,7 @@
 											{/if}
 
 											{#if row.visualStatus}
+												{@const visualRepair = findRepair(row, 'VISUAL')}
 												<div class="grid gap-1">
 													<p
 														class="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
@@ -576,15 +652,24 @@
 													<div
 														class="flex items-start justify-between gap-3 rounded border bg-background px-3 py-1.5"
 													>
-														<span class="text-xs text-muted-foreground"
-															>{row.visualRemarks ?? '-'}</span
-														>
+														<div class="grid">
+															<span class="text-xs text-muted-foreground"
+																>{row.visualRemarks ?? '-'}</span
+															>
+															{#if visualRepair}
+																<span class="text-xs text-status-warn">
+																	Repair: {visualRepair.action} — {visualRepair.actorName}
+																</span>
+															{/if}
+														</div>
 														<span
 															class={cn(
 																'shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold',
 																row.visualStatus === 'OK'
 																	? 'bg-status-ok-fill text-status-ok'
-																	: 'bg-status-ng-fill text-status-ng'
+																	: row.visualStatus === 'REPAIR'
+																		? 'bg-status-warn-fill text-status-warn'
+																		: 'bg-status-ng-fill text-status-ng'
 															)}
 														>
 															{row.visualStatus}

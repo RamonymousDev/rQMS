@@ -212,7 +212,7 @@ File tunggal: `src/lib/server/db/schema.ts`. Workflow dev: `bun run db:push` (bu
 ```
 stage:  START | MIDDLE | END
 shift:  DAY | NIGHT
-ok_ng:  OK | NG
+ok_ng:  OK | NG | REPAIR
 check_type: TORQUE | HAMMER
 ```
 
@@ -239,12 +239,13 @@ check_type: TORQUE | HAMMER
 
 ### Tabel Transaksi
 
-| Tabel                  | PK   | Kolom kunci                                                                                                                                                         | Catatan                                                   |
-| ---------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| `inspections`          | uuid | `partLineConfigId`, snapshot: `partNo`, `lineCode`, `operatorName`, `stage`, `shift`, `overallStatus`, `spotActual`, `visualStatus`, `visualRemarks`, `inspectedAt` | Append-only, snapshot untuk akurasi historis              |
-| `inspection_points`    | uuid | `inspectionId`, `pointNo` (snapshot), `status`, `remarks`                                                                                                           | Cascade delete                                            |
-| `inspection_hardwares` | uuid | `inspectionId`, snapshot lengkap hw + `checkType`, `checkNo`, `actualValue`, `status`, `remarks`                                                                    | Satu baris per titik (hardware × checkNo); cascade delete |
-| `inspection_lengths`   | uuid | `inspectionId`, snapshot + `actualMm`, `status`, `remarks`                                                                                                          | Cascade delete                                            |
+| Tabel                  | PK   | Kolom kunci                                                                                                                                                                       | Catatan                                                                             |
+| ---------------------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `inspections`          | uuid | `partLineConfigId`, snapshot: `partNo`, `lineCode`, `operatorName`, `stage`, `shift`, `overallStatus`, `spotActual`, `spotStatus`, `visualStatus`, `visualRemarks`, `inspectedAt` | Append-only, snapshot untuk akurasi historis                                        |
+| `inspection_points`    | uuid | `inspectionId`, `pointNo` (snapshot), `status`, `remarks`                                                                                                                         | Cascade delete                                                                      |
+| `inspection_hardwares` | uuid | `inspectionId`, snapshot lengkap hw + `checkType`, `checkNo`, `actualValue`, `status`, `remarks`                                                                                  | Satu baris per titik (hardware × checkNo); cascade delete                           |
+| `inspection_lengths`   | uuid | `inspectionId`, snapshot + `actualMm`, `status`, `remarks`                                                                                                                        | Cascade delete                                                                      |
+| `inspection_repairs`   | uuid | `inspectionId`, `itemType` (POINT/HARDWARE/LENGTH/SPOT/VISUAL), `itemId` (null utk SPOT/VISUAL), `action`, `actorId`, `actorName`, `createdAt`, `revertedAt`                      | Admin menandai NG → REPAIR; `revertedAt` diisi saat dibatalkan (histori tetap utuh) |
 
 ### Tabel Sistem
 
@@ -366,16 +367,16 @@ Semua response JSON dibungkus: `{ data: ... }` untuk sukses, `{ message: string 
 
 ### Status Code Konsisten
 
-| Kode | Makna                                                 |
-| ---- | ----------------------------------------------------- |
-| 400  | Payload invalid / UUID salah / password salah         |
-| 401  | Belum login                                           |
-| 403  | Permission kurang                                     |
-| 404  | Entity tidak ditemukan                                |
-| 409  | Duplikat (NIK, part+line) / re-check tanpa konfirmasi |
-| 413  | Body > 1 MB                                           |
-| 422  | Item wajib kosong / remarks NG kosong                 |
-| 429  | Rate limit terlampaui                                 |
+| Kode | Makna                                                                                         |
+| ---- | --------------------------------------------------------------------------------------------- |
+| 400  | Payload invalid / UUID salah / password salah                                                 |
+| 401  | Belum login                                                                                   |
+| 403  | Permission kurang                                                                             |
+| 404  | Entity tidak ditemukan                                                                        |
+| 409  | Duplikat (NIK, part+line) / re-check tanpa konfirmasi / item repair tidak berstatus NG-REPAIR |
+| 413  | Body > 1 MB                                                                                   |
+| 422  | Item wajib kosong / remarks NG kosong                                                         |
+| 429  | Rate limit terlampaui                                                                         |
 
 ### Master Data
 
@@ -438,17 +439,28 @@ Aturan bisnis di `evaluate()`:
 - **Visual**: OK/NG manual dari operator
 - Satu item NG → `overallStatus = 'NG'`
 - Remarks wajib diisi jika status NG
+- Admin dapat mengubah item NG → REPAIR (wajib action) dan membatalkannya kembali ke NG; overall dihitung ulang (NG > REPAIR > OK)
 
 ### Laporan Inspeksi (Admin)
 
 ```
 GET /api/inspections              → list dengan filter + pagination
-GET /api/inspections/:id          → detail lengkap dengan semua child
+GET /api/inspections/:id          → detail lengkap dengan semua child + repair aktif
+POST /api/inspections/:id/repair        → admin: item NG → REPAIR (body: { itemType, itemId?, action })
+POST /api/inspections/:id/repair/revert → admin: batalkan repair (status kembali NG)
 ```
 
-Filter yang didukung: `partNo`, `lineCode`, `stage`, `shift`, `status`, `operatorId`, `dateFrom`, `dateTo` (format YYYY-MM-DD, dianggap tanggal Jakarta)
+Filter yang didukung: `partNo`, `lineCode`, `stage`, `shift`, `status` (OK/NG/REPAIR), `operatorId`, `dateFrom`, `dateTo` (format YYYY-MM-DD, dianggap tanggal Jakarta)
 
 Pagination: `page` (default 1), `pageSize` (default 25, max 100)
+
+**Aturan REPAIR (admin):**
+
+- Hanya item berstatus `NG` yang bisa diubah ke `REPAIR`; `action` (string) **wajib** diisi, tercatat siapa & kapan di `inspection_repairs`.
+- `REPAIR` hanya bisa dibatalkan kembali ke `NG` (bukan diubah ke OK manual).
+- Setiap repair/revert menghitung ulang `overallStatus`: ada NG → NG; sisanya REPAIR → REPAIR; else OK.
+- Semua aksi masuk audit log (`repair_inspection` / `revert_inspection_repair`).
+- Board & dashboard menampilkan REPAIR dengan warna kuning (`status-warn`).
 
 ### Audit Log (Admin)
 
@@ -617,9 +629,16 @@ submitInspection(user, body); // → { id, overallStatus, shift, stage }
 ### `src/lib/server/inspections/reports.ts`
 
 ```ts
-listInspections(params); // filter + pagination → { rows, page, pageSize, total, totalPages }
-getInspection(id); // detail + points + hardwares + lengths + operator
+listInspections(params); // filter + pagination → { rows, page, pageSize, total, totalPages, ok, ng, repair }
+getInspection(id); // detail + points + hardwares + lengths + repairs aktif + operator
 countNgInspections(); // → number (total NG, untuk badge di sidebar)
+```
+
+### `src/lib/server/inspections/repairs.ts`
+
+```ts
+repairInspectionItem(user, inspectionId, body); // NG → REPAIR + action wajib (transaksi + recompute overall)
+revertInspectionRepair(inspectionId, body); // REPAIR → NG, baris repair ditandai revertedAt
 ```
 
 ### `src/lib/server/board/index.ts`

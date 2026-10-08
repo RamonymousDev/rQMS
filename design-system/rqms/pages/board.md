@@ -26,7 +26,9 @@ an angle, often by someone walking past. Not a desktop screen.
 
 This is the single most important element on the page.
 
-- Colour is the fast channel (green / red / grey), icon + text is the accurate channel.
+- Colour is the fast channel (green / red / **amber for REPAIR** / grey), icon + text is the accurate channel.
+- `REPAIR` = item NG yang sudah ditangani admin (wrench + kuning); ring badge 2px, sedangkan NG ring 4px —
+  bentuk ikut membedakan, bukan hanya hue.
 - Both light and dark fills are already specified in MASTER §1 — do not use opacity-only variants.
 - Cross-fade 150 ms on SSE update so a glance registers the change.
 

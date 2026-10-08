@@ -6,7 +6,7 @@ import { getOperationalDate, getOperationalDayRange, getShift } from '../shift.j
 
 export type ShiftKey = 'DAY' | 'NIGHT';
 export type StageKey = Stage;
-export type StatusValue = 'OK' | 'NG' | null;
+export type StatusValue = 'OK' | 'NG' | 'REPAIR' | null;
 
 export interface StageStatus {
 	status: StatusValue;
@@ -225,12 +225,18 @@ export async function getInspectionHistory(
 			inspectedAt: true,
 			operatorName: true,
 			spotActual: true,
+			spotStatus: true,
 			visualStatus: true,
 			visualRemarks: true
 		},
 		with: {
 			operator: { columns: { nik: true } },
-			points: { columns: { pointNo: true, status: true, remarks: true } },
+			points: { columns: { id: true, pointNo: true, status: true, remarks: true } },
+			// Hanya repair aktif (belum dibatalkan) — untuk badge & action di modal riwayat.
+			repairs: {
+				where: (r, { isNull }) => isNull(r.revertedAt),
+				columns: { itemType: true, itemId: true, action: true, actorName: true, createdAt: true }
+			},
 			hardwares: {
 				columns: {
 					id: true,
@@ -247,6 +253,7 @@ export async function getInspectionHistory(
 			},
 			lengths: {
 				columns: {
+					id: true,
 					lengthNo: true,
 					standardMm: true,
 					actualMm: true,

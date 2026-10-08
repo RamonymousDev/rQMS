@@ -10,6 +10,7 @@
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
+	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import DatePicker from '$lib/components/date-picker.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import {
@@ -26,6 +27,20 @@
 	import InboxIcon from '@lucide/svelte/icons/inbox';
 	import { formatDateTime } from '$lib/format.js';
 	import DownloadIcon from '@lucide/svelte/icons/download';
+	import WrenchIcon from '@lucide/svelte/icons/wrench';
+	import Undo2Icon from '@lucide/svelte/icons/undo-2';
+
+	type ItemStatus = 'OK' | 'NG' | 'REPAIR';
+	type RepairItemType = 'POINT' | 'HARDWARE' | 'LENGTH' | 'SPOT' | 'VISUAL';
+
+	type RepairRow = {
+		id: string;
+		itemType: RepairItemType;
+		itemId: string | null;
+		action: string;
+		actorName: string;
+		createdAt: string;
+	};
 
 	type InspectionRow = {
 		id: string;
@@ -33,17 +48,18 @@
 		lineCode: string;
 		stage: string;
 		shift: string;
-		overallStatus: 'OK' | 'NG';
+		overallStatus: ItemStatus;
 		operatorName: string;
 		inspectedAt: string;
 	};
 
 	type InspectionDetail = InspectionRow & {
 		spotActual: number | null;
-		visualStatus: 'OK' | 'NG' | null;
+		spotStatus: ItemStatus | null;
+		visualStatus: ItemStatus | null;
 		visualRemarks: string | null;
 		operator?: { nik: string; name: string };
-		points: { pointNo: string; status: 'OK' | 'NG'; remarks: string | null }[];
+		points: { id: string; pointNo: string; status: ItemStatus; remarks: string | null }[];
 		hardwares: {
 			id: string;
 			hwNo: string;
@@ -53,16 +69,19 @@
 			actualValue: number;
 			checkType: 'TORQUE' | 'HAMMER' | null;
 			checkNo: number;
-			status: 'OK' | 'NG';
+			status: ItemStatus;
 			remarks: string | null;
 		}[];
 		lengths: {
+			id: string;
 			lengthNo: string;
 			standardMm: number;
 			actualMm: number;
-			status: 'OK' | 'NG';
+			status: ItemStatus;
 			remarks: string | null;
 		}[];
+		/** Hanya repair aktif — yang sudah dibatalkan tidak dikirim server. */
+		repairs: RepairRow[];
 	};
 
 	let rows: InspectionRow[] = $state([]);
@@ -72,6 +91,7 @@
 	let total = $state(0);
 	let okCount = $state(0);
 	let ngCount = $state(0);
+	let repairCount = $state(0);
 
 	let filterPartNo = $state('');
 	let filterLineCode = $state('');
@@ -87,6 +107,15 @@
 	let detail: InspectionDetail | null = $state(null);
 	let detailOpen = $state(false);
 	let detailLoading = $state(false);
+
+	/** Target form repair inline: `${itemType}:${itemId ?? 'self'}`. */
+	let repairingKey: string | null = $state(null);
+	let repairAction = $state('');
+	let repairSubmitting = $state(false);
+	/** Key item yang sedang menampilkan konfirmasi batalkan repair. */
+	let revertConfirmKey: string | null = $state(null);
+	/** Key item yang sedang diproses pembatalannya (cegah double-submit). */
+	let revertingKey: string | null = $state(null);
 
 	let mounted = $state(false);
 	let searchTimer: ReturnType<typeof setTimeout> | undefined;
@@ -132,6 +161,7 @@
 			total = body.data.total;
 			okCount = body.data.ok ?? 0;
 			ngCount = body.data.ng ?? 0;
+			repairCount = body.data.repair ?? 0;
 		} finally {
 			if (seq === requestSeq) loading = false;
 		}
@@ -237,23 +267,119 @@
 		setTimeout(() => (exporting = false), 5000);
 	}
 
-	async function openDetail(row: InspectionRow) {
+	async function loadDetail(id: string, opts: { silent?: boolean } = {}) {
 		const seq = ++detailSeq;
-		detail = null;
-		detailLoading = true;
-		detailOpen = true;
+		const silent = opts.silent ?? false;
+		if (!silent) {
+			detail = null;
+			detailLoading = true;
+			detailOpen = true;
+			// Detail baru mulai bersih — jangan bawa form repair item sebelumnya.
+			repairingKey = null;
+			repairAction = '';
+			revertConfirmKey = null;
+		}
 		try {
-			const res = await fetch(`/api/inspections/${row.id}`);
+			const res = await fetch(`/api/inspections/${id}`);
 			const body = await res.json();
 			if (seq !== detailSeq) return;
 			if (!res.ok) {
 				toast.error(body?.message ?? 'Gagal memuat detail inspeksi.');
-				detailOpen = false;
+				if (!silent) detailOpen = false;
 				return;
 			}
 			detail = body.data;
 		} finally {
-			if (seq === detailSeq) detailLoading = false;
+			if (seq === detailSeq && !silent) detailLoading = false;
+		}
+	}
+
+	async function openDetail(row: InspectionRow) {
+		await loadDetail(row.id);
+	}
+
+	/** Refresh detail yang sedang terbuka TANPA menutup dialog / menampilkan skeleton. */
+	async function refreshDetail() {
+		if (!detail) return;
+		await loadDetail(detail.id, { silent: true });
+	}
+
+	function itemKey(itemType: RepairItemType, itemId: string | null): string {
+		return `${itemType}:${itemId ?? 'self'}`;
+	}
+
+	function parseKey(key: string): { itemType: RepairItemType; itemId: string | null } {
+		const [itemType, rawId] = key.split(':');
+		return {
+			itemType: itemType as RepairItemType,
+			itemId: rawId && rawId !== 'self' ? rawId : null
+		};
+	}
+
+	/** Repair AKTIF milik satu item (SPOT/VISUAL selalu itemId null). */
+	function findActiveRepair(itemType: RepairItemType, itemId: string | null): RepairRow | null {
+		return (
+			(detail?.repairs ?? []).find((r) => r.itemType === itemType && r.itemId === itemId) ?? null
+		);
+	}
+
+	function startRepair(itemType: RepairItemType, itemId: string | null) {
+		repairingKey = itemKey(itemType, itemId);
+		repairAction = '';
+	}
+
+	function cancelRepair() {
+		repairingKey = null;
+		repairAction = '';
+	}
+
+	async function submitRepair() {
+		if (!detail || !repairingKey || repairSubmitting) return;
+		const action = repairAction.trim();
+		if (!action) return; // tombol memang disabled, ini jaring pengaman
+		const { itemType, itemId } = parseKey(repairingKey);
+		const inspectionId = detail.id;
+		repairSubmitting = true;
+		try {
+			const res = await fetch(`/api/inspections/${inspectionId}/repair`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ itemType, itemId, action })
+			});
+			const body = await res.json().catch(() => null);
+			if (!res.ok) {
+				toast.error(body?.message ?? 'Gagal menyimpan repair.');
+				return;
+			}
+			toast.success('Repair tersimpan.');
+			cancelRepair();
+			// Refresh detail (status item + overall) dan list (badge + counter).
+			await Promise.all([refreshDetail(), load(page)]);
+		} finally {
+			repairSubmitting = false;
+		}
+	}
+
+	async function submitRevert(itemType: RepairItemType, itemId: string | null) {
+		if (!detail || revertingKey) return;
+		const inspectionId = detail.id;
+		revertingKey = itemKey(itemType, itemId);
+		try {
+			const res = await fetch(`/api/inspections/${inspectionId}/repair/revert`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ itemType, itemId })
+			});
+			const body = await res.json().catch(() => null);
+			if (!res.ok) {
+				toast.error(body?.message ?? 'Gagal membatalkan repair.');
+				return;
+			}
+			toast.success('Repair dibatalkan — status kembali NG.');
+			revertConfirmKey = null;
+			await Promise.all([refreshDetail(), load(page)]);
+		} finally {
+			revertingKey = null;
 		}
 	}
 
@@ -271,9 +397,103 @@
 	const statusOptions = [
 		{ value: '', label: 'Semua Status' },
 		{ value: 'OK', label: 'OK' },
+		{ value: 'REPAIR', label: 'Repair' },
 		{ value: 'NG', label: 'NG' }
 	];
 </script>
+
+<!--
+	Kontrol repair per item: tombol Repair (NG), form action inline, atau
+	info repair aktif + Batalkan (REPAIR). Item OK / inspeksi lama (null) tidak
+	menampilkan apa-apa. Dipakai di Points, Spot, Hardwares, Lengths, Visual.
+-->
+{#snippet repairControls(
+	itemType: RepairItemType,
+	itemId: string | null,
+	status: ItemStatus | null,
+	activeRepair: RepairRow | null
+)}
+	{#if status === 'NG'}
+		{#if repairingKey === itemKey(itemType, itemId)}
+			<div class="grid gap-2 rounded-lg border border-dashed p-3">
+				<Label for={`repair-action-${itemType}-${itemId ?? 'self'}`}>Action (wajib)</Label>
+				<Textarea
+					id={`repair-action-${itemType}-${itemId ?? 'self'}`}
+					rows={2}
+					placeholder="Tindakan perbaikan yang dilakukan…"
+					bind:value={repairAction}
+					disabled={repairSubmitting}
+				/>
+				<div class="flex justify-end gap-2">
+					<Button
+						size="sm"
+						onclick={submitRepair}
+						disabled={!repairAction.trim() || repairSubmitting}
+					>
+						{repairSubmitting ? 'Menyimpan…' : 'Simpan Repair'}
+					</Button>
+					<Button variant="outline" size="sm" onclick={cancelRepair} disabled={repairSubmitting}>
+						Batal
+					</Button>
+				</div>
+			</div>
+		{:else}
+			<div class="flex justify-end">
+				<Button variant="outline" size="sm" onclick={() => startRepair(itemType, itemId)}>
+					<WrenchIcon class="size-3.5" />
+					Repair
+				</Button>
+			</div>
+		{/if}
+	{:else if status === 'REPAIR' && activeRepair}
+		<div class="grid gap-2 rounded-lg border border-status-warn/30 bg-status-warn-fill/40 p-3">
+			<div class="flex items-start justify-between gap-3">
+				<div class="grid gap-0.5">
+					<span class="text-xs font-medium text-status-warn">Repair: {activeRepair.action}</span>
+					<span class="text-[11px] text-status-warn/80">
+						oleh {activeRepair.actorName} · {formatDateTime(activeRepair.createdAt)}
+					</span>
+				</div>
+				{#if revertConfirmKey !== itemKey(itemType, itemId)}
+					<Button
+						variant="outline"
+						size="sm"
+						onclick={() => (revertConfirmKey = itemKey(itemType, itemId))}
+						disabled={revertingKey !== null}
+					>
+						<Undo2Icon class="size-3.5" />
+						Batalkan
+					</Button>
+				{/if}
+			</div>
+			{#if revertConfirmKey === itemKey(itemType, itemId)}
+				<div
+					class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-status-warn/30 bg-background/60 px-3 py-2"
+				>
+					<span class="text-xs text-status-warn">Batalkan repair ini? Status kembali NG.</span>
+					<div class="flex gap-2">
+						<Button
+							size="sm"
+							variant="destructive"
+							onclick={() => submitRevert(itemType, itemId)}
+							disabled={revertingKey !== null}
+						>
+							{revertingKey === itemKey(itemType, itemId) ? 'Membatalkan…' : 'Ya, Batalkan'}
+						</Button>
+						<Button
+							variant="outline"
+							size="sm"
+							onclick={() => (revertConfirmKey = null)}
+							disabled={revertingKey !== null}
+						>
+							Tidak
+						</Button>
+					</div>
+				</div>
+			{/if}
+		</div>
+	{/if}
+{/snippet}
 
 <PageHeader
 	title="Hasil Inspeksi"
@@ -291,7 +511,7 @@
 </PageHeader>
 
 <!-- Summary Stats (total global sesuai filter) -->
-<div class="grid grid-cols-3 gap-3">
+<div class="grid grid-cols-2 gap-3 md:grid-cols-4">
 	<div class="rounded-lg border bg-muted/30 px-3 py-2 text-center">
 		<p class="text-2xl font-bold">{total}</p>
 		<p class="text-xs text-muted-foreground">Total</p>
@@ -299,6 +519,10 @@
 	<div class="rounded-lg border border-status-ok/30 bg-status-ok-fill px-3 py-2 text-center">
 		<p class="text-2xl font-bold text-status-ok tabular-nums">{okCount}</p>
 		<p class="text-xs font-medium text-status-ok">OK</p>
+	</div>
+	<div class="rounded-lg border border-status-warn/30 bg-status-warn-fill px-3 py-2 text-center">
+		<p class="text-2xl font-bold text-status-warn tabular-nums">{repairCount}</p>
+		<p class="text-xs font-medium text-status-warn">Repair</p>
 	</div>
 	<div class="rounded-lg border border-status-ng/30 bg-status-ng-fill px-3 py-2 text-center">
 		<p class="text-2xl font-bold text-status-ng tabular-nums">{ngCount}</p>
@@ -571,14 +795,22 @@
 						<h3 class="font-semibold">Points</h3>
 						<div class="grid gap-2">
 							{#each detail.points as point (point.pointNo)}
-								<div class="flex items-start justify-between gap-3 rounded-lg border p-3">
-									<div class="grid">
-										<span class="font-medium">{point.pointNo}</span>
-										{#if point.remarks}
-											<span class="text-xs text-muted-foreground">{point.remarks}</span>
-										{/if}
+								<div class="grid gap-2">
+									<div class="flex items-start justify-between gap-3 rounded-lg border p-3">
+										<div class="grid">
+											<span class="font-medium">{point.pointNo}</span>
+											{#if point.remarks}
+												<span class="text-xs text-muted-foreground">{point.remarks}</span>
+											{/if}
+										</div>
+										<StatusBadge status={point.status} />
 									</div>
-									<StatusBadge status={point.status} />
+									{@render repairControls(
+										'POINT',
+										point.id,
+										point.status,
+										findActiveRepair('POINT', point.id)
+									)}
 								</div>
 							{/each}
 						</div>
@@ -588,7 +820,20 @@
 				{#if detail.spotActual !== null}
 					<div class="grid gap-2">
 						<h3 class="font-semibold">Spot</h3>
-						<div class="rounded-lg border p-3">Actual: {detail.spotActual}</div>
+						<div class="grid gap-2">
+							<div class="flex items-center justify-between gap-3 rounded-lg border p-3">
+								<span>Actual: {detail.spotActual}</span>
+								{#if detail.spotStatus}
+									<StatusBadge status={detail.spotStatus} />
+								{/if}
+							</div>
+							{@render repairControls(
+								'SPOT',
+								null,
+								detail.spotStatus,
+								findActiveRepair('SPOT', null)
+							)}
+						</div>
 					</div>
 				{/if}
 
@@ -597,22 +842,30 @@
 						<h3 class="font-semibold">Hardwares</h3>
 						<div class="grid gap-2">
 							{#each detail.hardwares as hw (hw.id)}
-								<div class="flex items-start justify-between gap-3 rounded-lg border p-3">
-									<div class="grid">
-										<span class="font-medium">
-											{hw.hwNo} ({hw.hwName}) {#if hw.checkType}
-												{hw.checkType === 'TORQUE' ? 'Torque' : 'Hammer'} #{hw.checkNo}{/if}
-										</span>
-										<span class="text-xs text-muted-foreground">
-											Standard {hw.standardValue}
-											{hw.unit} · Actual {hw.actualValue}
-											{hw.unit}
-										</span>
-										{#if hw.remarks}
-											<span class="text-xs text-muted-foreground">{hw.remarks}</span>
-										{/if}
+								<div class="grid gap-2">
+									<div class="flex items-start justify-between gap-3 rounded-lg border p-3">
+										<div class="grid">
+											<span class="font-medium">
+												{hw.hwNo} ({hw.hwName}) {#if hw.checkType}
+													{hw.checkType === 'TORQUE' ? 'Torque' : 'Hammer'} #{hw.checkNo}{/if}
+											</span>
+											<span class="text-xs text-muted-foreground">
+												Standard {hw.standardValue}
+												{hw.unit} · Actual {hw.actualValue}
+												{hw.unit}
+											</span>
+											{#if hw.remarks}
+												<span class="text-xs text-muted-foreground">{hw.remarks}</span>
+											{/if}
+										</div>
+										<StatusBadge status={hw.status} />
 									</div>
-									<StatusBadge status={hw.status} />
+									{@render repairControls(
+										'HARDWARE',
+										hw.id,
+										hw.status,
+										findActiveRepair('HARDWARE', hw.id)
+									)}
 								</div>
 							{/each}
 						</div>
@@ -624,17 +877,25 @@
 						<h3 class="font-semibold">Lengths</h3>
 						<div class="grid gap-2">
 							{#each detail.lengths as length (length.lengthNo)}
-								<div class="flex items-start justify-between gap-3 rounded-lg border p-3">
-									<div class="grid">
-										<span class="font-medium">{length.lengthNo}</span>
-										<span class="text-xs text-muted-foreground">
-											Standard {length.standardMm} mm · Actual {length.actualMm} mm
-										</span>
-										{#if length.remarks}
-											<span class="text-xs text-muted-foreground">{length.remarks}</span>
-										{/if}
+								<div class="grid gap-2">
+									<div class="flex items-start justify-between gap-3 rounded-lg border p-3">
+										<div class="grid">
+											<span class="font-medium">{length.lengthNo}</span>
+											<span class="text-xs text-muted-foreground">
+												Standard {length.standardMm} mm · Actual {length.actualMm} mm
+											</span>
+											{#if length.remarks}
+												<span class="text-xs text-muted-foreground">{length.remarks}</span>
+											{/if}
+										</div>
+										<StatusBadge status={length.status} />
 									</div>
-									<StatusBadge status={length.status} />
+									{@render repairControls(
+										'LENGTH',
+										length.id,
+										length.status,
+										findActiveRepair('LENGTH', length.id)
+									)}
 								</div>
 							{/each}
 						</div>
@@ -644,9 +905,17 @@
 				{#if detail.visualStatus}
 					<div class="grid gap-2">
 						<h3 class="font-semibold">Visual</h3>
-						<div class="flex items-start justify-between gap-3 rounded-lg border p-3">
-							<span class="text-xs text-muted-foreground">{detail.visualRemarks ?? '-'}</span>
-							<StatusBadge status={detail.visualStatus} />
+						<div class="grid gap-2">
+							<div class="flex items-start justify-between gap-3 rounded-lg border p-3">
+								<span class="text-xs text-muted-foreground">{detail.visualRemarks ?? '-'}</span>
+								<StatusBadge status={detail.visualStatus} />
+							</div>
+							{@render repairControls(
+								'VISUAL',
+								null,
+								detail.visualStatus,
+								findActiveRepair('VISUAL', null)
+							)}
 						</div>
 					</div>
 				{/if}

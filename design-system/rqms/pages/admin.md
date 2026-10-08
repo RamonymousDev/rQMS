@@ -48,6 +48,14 @@ Without it every `option.value` is `undefined` and Svelte throws `each_key_dupli
   calendar days — a night shift starting at 20:00 belongs to that date, and a 01:00 inspection belongs to
   the previous one. Label the field accordingly.
 
+## Repair (Hasil Inspeksi)
+
+- Item `NG` menampilkan tombol **Repair** → form inline: field `Action` (wajib) + `Simpan Repair`.
+- Item `REPAIR` menampilkan badge kuning, teks `Repair: {action}` + `oleh {admin} · {waktu}`, dan tombol
+  **Batalkan** dengan konfirmasi inline (status kembali `NG`).
+- Overall dihitung ulang oleh server (NG > REPAIR > OK); daftar & counter menyegarkan diri setelah aksi.
+- Tombol hanya muncul untuk admin; item `OK` dan inspeksi lama (status null) tidak menampilkan kontrol apa pun.
+
 ## Audit log
 
 Read-only. Never offer edit or delete affordances — the append-only nature is the feature. Timestamp

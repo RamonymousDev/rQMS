@@ -46,7 +46,9 @@ export function buildFilters(params: URLSearchParams): SQL[] {
 
 	const status = params.get('status')?.trim();
 	if (status) {
-		if (status !== 'OK' && status !== 'NG') throw error(400, 'Status tidak valid.');
+		if (status !== 'OK' && status !== 'NG' && status !== 'REPAIR') {
+			throw error(400, 'Status tidak valid.');
+		}
 		filters.push(eq(inspections.overallStatus, status));
 	}
 
@@ -95,6 +97,7 @@ export async function listInspections(params: URLSearchParams) {
 
 	const ok = statusCounts.find((s) => s.status === 'OK')?.value ?? 0;
 	const ng = statusCounts.find((s) => s.status === 'NG')?.value ?? 0;
+	const repair = statusCounts.find((s) => s.status === 'REPAIR')?.value ?? 0;
 
 	return {
 		rows,
@@ -103,7 +106,8 @@ export async function listInspections(params: URLSearchParams) {
 		total: total.value,
 		totalPages: Math.max(1, Math.ceil(total.value / pageSize)),
 		ok,
-		ng
+		ng,
+		repair
 	};
 }
 
@@ -116,6 +120,11 @@ export async function getInspection(id: string) {
 			points: { orderBy: (p) => [asc(p.pointNo)] },
 			hardwares: { orderBy: (h) => [asc(h.hwNo), asc(h.checkNo)] },
 			lengths: { orderBy: (l) => [asc(l.lengthNo)] },
+			// Repair aktif saja; baris reverted tetap tersimpan untuk histori (audit).
+			repairs: {
+				where: (r, { isNull }) => isNull(r.revertedAt),
+				orderBy: (r, { desc }) => [desc(r.createdAt)]
+			},
 			operator: { columns: { id: true, nik: true, name: true } }
 		}
 	});

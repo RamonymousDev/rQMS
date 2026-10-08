@@ -13,6 +13,7 @@ const TREND_DAYS = 7;
 export type StatusCounts = {
 	ok: number;
 	ng: number;
+	repair: number;
 	total: number;
 };
 
@@ -21,6 +22,7 @@ export type TrendPoint = {
 	label: string;
 	ok: number;
 	ng: number;
+	repair: number;
 	total: number;
 };
 
@@ -28,11 +30,12 @@ export type LineStatusPoint = {
 	lineCode: string;
 	ok: number;
 	ng: number;
+	repair: number;
 	total: number;
 	/** Waktu inspeksi terakhir di line ini; null = belum ada data. */
 	lastInspectedAt: string | null;
 	/** Status inspeksi TERAKHIR di line ini — menentukan warna kartu. */
-	latestStatus: 'OK' | 'NG' | null;
+	latestStatus: 'OK' | 'NG' | 'REPAIR' | null;
 };
 
 export type DashboardStats = {
@@ -89,11 +92,11 @@ async function lineStatuses(where: SQL[]): Promise<LineStatusPoint[]> {
 		const existing = byLine.get(row.lineCode);
 		if (!existing) {
 			// Baris pertama per line = inspeksi terbaru (sudah terurut desc).
-			const isOk = row.status === 'OK';
 			byLine.set(row.lineCode, {
 				lineCode: row.lineCode,
-				ok: isOk ? 1 : 0,
-				ng: isOk ? 0 : 1,
+				ok: row.status === 'OK' ? 1 : 0,
+				ng: row.status === 'NG' ? 1 : 0,
+				repair: row.status === 'REPAIR' ? 1 : 0,
 				total: 1,
 				lastInspectedAt: row.inspectedAt.toISOString(),
 				latestStatus: row.status
@@ -101,6 +104,7 @@ async function lineStatuses(where: SQL[]): Promise<LineStatusPoint[]> {
 			continue;
 		}
 		if (row.status === 'OK') existing.ok += 1;
+		else if (row.status === 'REPAIR') existing.repair += 1;
 		else existing.ng += 1;
 		existing.total += 1;
 	}
@@ -117,7 +121,8 @@ async function countByStatus(where: SQL[]): Promise<StatusCounts> {
 		.groupBy(inspections.overallStatus);
 	const ok = rows.find((r) => r.status === 'OK')?.value ?? 0;
 	const ng = rows.find((r) => r.status === 'NG')?.value ?? 0;
-	return { ok, ng, total: ok + ng };
+	const repair = rows.find((r) => r.status === 'REPAIR')?.value ?? 0;
+	return { ok, ng, repair, total: ok + ng + repair };
 }
 
 /**
@@ -163,12 +168,13 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 
 	const byDate = new Map<string, TrendPoint>();
 	for (const date of dates) {
-		byDate.set(date, { date, label: trendLabel(date), ok: 0, ng: 0, total: 0 });
+		byDate.set(date, { date, label: trendLabel(date), ok: 0, ng: 0, repair: 0, total: 0 });
 	}
 	for (const row of trendRows) {
 		const point = byDate.get(getOperationalDate(row.inspectedAt));
 		if (!point) continue;
 		if (row.status === 'OK') point.ok += 1;
+		else if (row.status === 'REPAIR') point.repair += 1;
 		else point.ng += 1;
 		point.total += 1;
 	}

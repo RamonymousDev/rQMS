@@ -81,12 +81,13 @@ User hanya boleh mengakses Line jika dia memiliki permission tersebut.
 
 ### 3.3 Transaksi (Snapshot)
 
-| Table                  | Isi Utama                                                                                                                                                   |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `inspections`          | part_line_config_id, part_no, line_code, stage, shift, overall_status, spot_actual, visual_status, visual_remarks, operator_id, operator_name, inspected_at |
-| `inspection_points`    | inspection_id, point_no, status, remarks                                                                                                                    |
-| `inspection_hardwares` | inspection_id, hw_no, hw_name, check_type, check_no, standard_value, unit, actual_value, status, remarks                                                    |
-| `inspection_lengths`   | inspection_id, length_no, standard_mm, actual_mm, status, remarks                                                                                           |
+| Table                  | Isi Utama                                                                                                                                                                |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `inspections`          | part_line_config_id, part_no, line_code, stage, shift, overall_status, spot_actual, spot_status, visual_status, visual_remarks, operator_id, operator_name, inspected_at |
+| `inspection_points`    | inspection_id, point_no, status, remarks                                                                                                                                 |
+| `inspection_hardwares` | inspection_id, hw_no, hw_name, check_type, check_no, standard_value, unit, actual_value, status, remarks                                                                 |
+| `inspection_lengths`   | inspection_id, length_no, standard_mm, actual_mm, status, remarks                                                                                                        |
+| `inspection_repairs`   | inspection_id, item_type (POINT/HARDWARE/LENGTH/SPOT/VISUAL), item_id, action, actor_id, actor_name, created_at, reverted_at                                             |
 
 Semua nilai penting di transaksi disimpan sebagai **snapshot** agar history tetap akurat meski master berubah.
 
@@ -287,29 +288,40 @@ Item yang dihitung:
    - `part_no`, `line_code`
    - `operator_id`, `operator_name`
    - `stage`, `shift`, `overall_status`
-   - `spot_actual`, `visual_status`, `visual_remarks`
+   - `spot_actual`, `spot_status`, `visual_status`, `visual_remarks`
 4. Insert detail:
    - `inspection_points`
    - `inspection_hardwares` (snapshot `hw_no`, `hw_name`, `check_type`, `check_no`, `standard_value`, `unit`)
    - `inspection_lengths` (snapshot `length_no`, `standard_mm`)
 5. Return sukses.
 
+### 5.10 Repair (Admin)
+
+Item yang NG dapat ditandai **REPAIR** oleh admin (permission `admin_access`), dengan **Action wajib** (string tindakan perbaikan):
+
+1. Item yang bisa di-repair: Point, Hardware, Length, Spot, Visual — hanya yang berstatus `NG`.
+2. Isi `action` (wajib) → status item menjadi `REPAIR`; baris `inspection_repairs` mencatat action + admin + waktu.
+3. Overall dihitung ulang: ada `NG` → NG; sisanya `REPAIR` → REPAIR; else OK. Inspeksi yang sudah di-repair tidak lagi dihitung sebagai NG di badge sidebar/dashboard.
+4. Repair dapat **dibatalkan** (kembali `NG`); baris repair lama ditandai `reverted_at` sehingga histori tetap utuh.
+5. Semua aksi masuk audit log (`repair_inspection` / `revert_inspection_repair`).
+
 ---
 
 ## 6. Business Rules Ringkas (Harus Diimplementasikan)
 
-| No  | Rule                                                           | Lokasi Enforce       |
-| --- | -------------------------------------------------------------- | -------------------- |
-| 1   | Remarks mandatory jika status = NG                             | Backend + Frontend   |
-| 2   | Overall = NG jika ada minimal 1 item NG                        | Backend              |
-| 3   | Re-check: jika sudah OK → wajib konfirmasi                     | Backend + Frontend   |
-| 4   | Shift dihitung otomatis dari waktu server                      | Backend              |
-| 5   | User hanya boleh akses Line sesuai permission                  | Backend (middleware) |
-| 6   | Part harus sudah dikonfigurasi di Line sebelum bisa diinspeksi | Backend              |
-| 7   | Standard hardware & length diambil dari Part+Line Config       | Backend              |
-| 8   | Semua nilai penting di transaksi disimpan sebagai snapshot     | Backend              |
-| 9   | Actual >= Standard → OK (Hardware, Length); Spot wajib exact   | Backend              |
-| 10  | Stage hanya: START / MIDDLE / END                              | Backend + Frontend   |
+| No  | Rule                                                                                                   | Lokasi Enforce       |
+| --- | ------------------------------------------------------------------------------------------------------ | -------------------- |
+| 1   | Remarks mandatory jika status = NG                                                                     | Backend + Frontend   |
+| 2   | Overall = NG jika ada minimal 1 item NG                                                                | Backend              |
+| 3   | Re-check: jika sudah OK → wajib konfirmasi                                                             | Backend + Frontend   |
+| 4   | Shift dihitung otomatis dari waktu server                                                              | Backend              |
+| 5   | User hanya boleh akses Line sesuai permission                                                          | Backend (middleware) |
+| 6   | Part harus sudah dikonfigurasi di Line sebelum bisa diinspeksi                                         | Backend              |
+| 7   | Standard hardware & length diambil dari Part+Line Config                                               | Backend              |
+| 8   | Semua nilai penting di transaksi disimpan sebagai snapshot                                             | Backend              |
+| 9   | Actual >= Standard → OK (Hardware, Length); Spot wajib exact                                           | Backend              |
+| 10  | Stage hanya: START / MIDDLE / END                                                                      | Backend + Frontend   |
+| 11  | Admin: item NG → REPAIR (wajib action) / revert REPAIR → NG; overall dihitung ulang (NG > REPAIR > OK) | Backend + Frontend   |
 
 ---
 

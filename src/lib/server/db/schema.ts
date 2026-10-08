@@ -19,7 +19,16 @@ import { relations } from 'drizzle-orm';
 // ======================
 export const stageEnum = pgEnum('stage', ['START', 'MIDDLE', 'END']);
 export const shiftEnum = pgEnum('shift', ['DAY', 'NIGHT']);
-export const okNgEnum = pgEnum('ok_ng', ['OK', 'NG']);
+/** Status item & overall. REPAIR = NG yang sudah ditangani admin (wajib action). */
+export const okNgEnum = pgEnum('ok_ng', ['OK', 'NG', 'REPAIR']);
+/** Tipe item yang bisa ditandai repair oleh admin. */
+export const repairItemEnum = pgEnum('repair_item', [
+	'POINT',
+	'HARDWARE',
+	'LENGTH',
+	'SPOT',
+	'VISUAL'
+]);
 /** Tipe pengecekan hardware — keduanya numerik dengan aturan actual >= standard. */
 export const checkTypeEnum = pgEnum('check_type', ['TORQUE', 'HAMMER']);
 
@@ -254,6 +263,8 @@ export const inspections = pgTable(
 		overallStatus: okNgEnum('overall_status').notNull(),
 
 		spotActual: integer('spot_actual'),
+		// Snapshot status spot saat submit (rule exact). Null untuk inspeksi lama.
+		spotStatus: okNgEnum('spot_status'),
 		visualStatus: okNgEnum('visual_status'),
 		visualRemarks: text('visual_remarks'),
 
@@ -338,6 +349,31 @@ export const inspectionLengths = pgTable(
 		remarks: text('remarks')
 	},
 	(table) => [index('idx_inspection_lengths_inspection').on(table.inspectionId)]
+);
+
+// ======================
+// TRANSAKSI: REPAIR (admin menandai item NG sudah diperbaiki)
+// Append-only: revert mengisi revertedAt pada baris aktif, bukan menghapus.
+// ======================
+export const inspectionRepairs = pgTable(
+	'inspection_repairs',
+	{
+		id: uuid('id').defaultRandom().primaryKey(),
+		inspectionId: uuid('inspection_id')
+			.notNull()
+			.references(() => inspections.id, { onDelete: 'cascade' }),
+		/** Spot & Visual tidak punya baris child; itemId null untuk keduanya. */
+		itemType: repairItemEnum('item_type').notNull(),
+		itemId: uuid('item_id'),
+		action: text('action').notNull(),
+		actorId: uuid('actor_id')
+			.notNull()
+			.references(() => users.id),
+		actorName: varchar('actor_name', { length: 100 }).notNull(), // snapshot
+		createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+		revertedAt: timestamp('reverted_at', { withTimezone: true })
+	},
+	(table) => [index('idx_inspection_repairs_inspection').on(table.inspectionId)]
 );
 
 // ======================
@@ -439,7 +475,19 @@ export const inspectionsRelations = relations(inspections, ({ one, many }) => ({
 	}),
 	points: many(inspectionPoints),
 	hardwares: many(inspectionHardwares),
-	lengths: many(inspectionLengths)
+	lengths: many(inspectionLengths),
+	repairs: many(inspectionRepairs)
+}));
+
+export const inspectionRepairsRelations = relations(inspectionRepairs, ({ one }) => ({
+	inspection: one(inspections, {
+		fields: [inspectionRepairs.inspectionId],
+		references: [inspections.id]
+	}),
+	actor: one(users, {
+		fields: [inspectionRepairs.actorId],
+		references: [users.id]
+	})
 }));
 
 export const inspectionPointsRelations = relations(inspectionPoints, ({ one }) => ({
